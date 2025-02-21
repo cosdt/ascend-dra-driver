@@ -21,46 +21,56 @@ import (
 	"math/rand"
 	"os"
 
+	"huawei.com/npu-exporter/v5/devmanager"
 	resourceapi "k8s.io/api/resource/v1beta1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/utils/ptr"
+	"sigs.k8s.io/dra-example-driver/pkg/server"
 
 	"github.com/google/uuid"
 )
 
-func enumerateAllPossibleDevices(numGPUs int) (AllocatableDevices, error) {
-	seed := os.Getenv("NODE_NAME")
-	uuids := generateUUIDs(seed, numGPUs)
+func enumerateAllPossibleDevices() (AllocatableDevices, error) {
+	devM, err := devmanager.AutoInit("")
+	if err != nil {
+		return nil, err
+	}
+	hdm := server.NewHwDevManager(devM)
+	allInfo := hdm.AllInfo
 
 	alldevices := make(AllocatableDevices)
-	for i, uuid := range uuids {
+	// 遍历所有设备，根据实际硬件信息构造 resourceapi.Device 对象
+	for _, dev := range allInfo.AllDevs {
+		// 使用 dev.LogicID 作为设备索引，设备名称格式为 "npu-<LogicID>"
+		deviceName := fmt.Sprintf("npu-%d", dev.LogicID)
+		// 生成设备唯一标识（例如使用 NODE_NAME 和设备ID 拼接）
+		uuidStr := fmt.Sprintf("%s-%d", os.Getenv("NODE_NAME"), dev.LogicID)
+
 		device := resourceapi.Device{
-			Name: fmt.Sprintf("gpu-%d", i),
+			Name: deviceName,
 			Basic: &resourceapi.BasicDevice{
 				Attributes: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
-					"index": {
-						IntValue: ptr.To(int64(i)),
-					},
-					"uuid": {
-						StringValue: ptr.To(uuid),
-					},
-					"model": {
-						StringValue: ptr.To("LATEST-GPU-MODEL"),
-					},
-					"driverVersion": {
-						VersionValue: ptr.To("1.0.0"),
-					},
+					"index": {IntValue: ptr.To(int64(dev.LogicID))},
+					"uuid":  {StringValue: ptr.To(uuidStr)},
+					"model": {StringValue: ptr.To(dev.DevType)},
 				},
 				Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
-					"memory": {
-						Value: resource.MustParse("80Gi"),
-					},
+					"memory": {Value: resource.MustParse("32Gi")},
 				},
 			},
 		}
 		alldevices[device.Name] = device
 	}
 	return alldevices, nil
+}
+
+func contains(slice []string, item string) bool {
+	for _, v := range slice {
+		if v == item {
+			return true
+		}
+	}
+	return false
 }
 
 func generateUUIDs(seed string, count int) []string {
@@ -71,7 +81,7 @@ func generateUUIDs(seed string, count int) []string {
 		charset := make([]byte, 16)
 		rand.Read(charset)
 		uuid, _ := uuid.FromBytes(charset)
-		uuids[i] = "gpu-" + uuid.String()
+		uuids[i] = "npu-" + uuid.String()
 	}
 
 	return uuids
