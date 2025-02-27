@@ -72,11 +72,6 @@ func (hnm *HwAscend310PManager) GetNPUs() (common.NpuAllInfo, error) {
 		if !common.ParamOption.PresetVDevice {
 			common.FakeAiCoreDevice(davinCiDev, &aiCoreDevices)
 		}
-		if vDevInfos.TotalResource.VDevNum == 0 {
-			hnm.assemblePhyDevices(davinCiDev, &allDevices, &allDeviceTypes)
-			continue
-		}
-		hnm.assembleVirtualDevices(davinCiDev, vDevInfos, &allDevices, &allDeviceTypes)
 	}
 	allDeviceTypes = hnm.removeDuplicate(&allDeviceTypes)
 	return common.NpuAllInfo{AllDevs: allDevices, AICoreDevs: aiCoreDevices, AllDevTypes: allDeviceTypes}, nil
