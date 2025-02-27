@@ -88,7 +88,7 @@ func (hdm *HwDevManager) setAscendManager(dmgr devmanager.DeviceInterface) error
 	if err = common.CheckCardUsageMode(common.ParamOption.Use310PMixedInsert, productTypes); err != nil {
 		return err
 	}
-	return hdm.UpdateServerType()
+	return nil
 }
 
 // UpdateServerType update server type, like Ascend910-32
