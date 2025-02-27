@@ -64,39 +64,15 @@ func newApp() *cli.App {
 	flags := &Flags{
 		loggingConfig: flags.NewLoggingConfig(),
 	}
-	cliFlags := []cli.Flag{
-		&cli.StringFlag{
-			Name:        "node-name",
-			Usage:       "The name of the node to be worked on.",
-			Required:    true,
-			Destination: &flags.nodeName,
-			EnvVars:     []string{"NODE_NAME"},
-		},
-		&cli.StringFlag{
-			Name:        "cdi-root",
-			Usage:       "Absolute path to the directory where CDI files will be generated.",
-			Value:       "/etc/cdi",
-			Destination: &flags.cdiRoot,
-			EnvVars:     []string{"CDI_ROOT"},
-		},
-	}
-	cliFlags = append(cliFlags, flags.kubeClientConfig.Flags()...)
-	cliFlags = append(cliFlags, flags.loggingConfig.Flags()...)
 
 	app := &cli.App{
 		Name:  "dra-example-kubeletplugin",
 		Usage: "dra-example-kubeletplugin implements a DRA driver plugin for Ascend NPU.",
-		Flags: cliFlags,
 		Action: func(c *cli.Context) error {
 			ctx := c.Context
-			clientSets, err := flags.kubeClientConfig.NewClientSets()
-			if err != nil {
-				return fmt.Errorf("create client: %v", err)
-			}
 
 			config := &Config{
-				flags:      flags,
-				coreclient: clientSets.Core,
+				flags: flags,
 			}
 
 			return StartPlugin(ctx, config)
@@ -107,24 +83,6 @@ func newApp() *cli.App {
 }
 
 func StartPlugin(ctx context.Context, config *Config) error {
-	err := os.MkdirAll(DriverPluginPath, 0750)
-	if err != nil {
-		return err
-	}
-
-	info, err := os.Stat(config.flags.cdiRoot)
-	switch {
-	case err != nil && os.IsNotExist(err):
-		err := os.MkdirAll(config.flags.cdiRoot, 0750)
-		if err != nil {
-			return err
-		}
-	case err != nil:
-		return err
-	case !info.IsDir():
-		return fmt.Errorf("path for CDI file generation is not a directory: '%v'", err)
-	}
-
 	driver, err := NewDriver(ctx, config)
 	if err != nil {
 		return err
