@@ -130,7 +130,6 @@ func (tool *AscendTools) delVirDevInfo(newDeviceList map[string]string) {
 
 func (tool *AscendTools) assembleNpuDeviceStruct(deviType, deviceName string,
 	davinCiDev common.DavinCiDev) common.NpuDevice {
-	hwlog.RunLog.Debugf("Found Huawei Ascend, deviceType: %s, deviceName: %s", deviType, deviceName)
 	return common.NpuDevice{
 		DevType:    deviType,
 		DeviceName: deviceName,
