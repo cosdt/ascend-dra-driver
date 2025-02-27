@@ -199,12 +199,6 @@ func (s *DeviceState) prepareDevices(claim *resourceapi.ResourceClaim) (Prepared
 		if _, exists := s.allocatable[result.Device]; !exists {
 			return nil, fmt.Errorf("requested NPU is not allocatable: %v", result.Device)
 		}
-		for _, c := range slices.Backward(configs) {
-			if len(c.Requests) == 0 || slices.Contains(c.Requests, result.Request) {
-				configResultsMap[c.Config] = append(configResultsMap[c.Config], &result)
-				break
-			}
-		}
 	}
 
 	perDeviceCDIContainerEdits := make(PerDeviceCDIContainerEdits)
