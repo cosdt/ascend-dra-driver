@@ -107,6 +107,11 @@ func (cdi *CDIHandler) CreateClaimSpecFile(claimUID string, devices PreparedDevi
 				},
 			},
 		},
+		ContainerEdits: cdispec.ContainerEdits{
+			Env: []string{
+				fmt.Sprintf("ASCEND_VISIBLE_DEVICES=%s", visibleDevices),
+			},
+		},
 	}
 
 	minVersion, err := cdiapi.MinimumRequiredVersion(spec)
