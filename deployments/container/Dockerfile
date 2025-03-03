@@ -24,7 +24,7 @@ RUN make PREFIX=/artifacts cmds
 
 FROM ${BASE_IMAGE}
 
-RUN apt-get upate && \
+RUN apt upate && \
     apt install curl && \
     apt install iputils-ping && \
     apt install wget
