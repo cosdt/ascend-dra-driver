@@ -24,6 +24,11 @@ RUN make PREFIX=/artifacts cmds
 
 FROM ${BASE_IMAGE}
 
+RUN apt-get upate && \
+    apt install curl && \
+    apt install iputils-ping && \
+    apt install wget
+
 LABEL io.k8s.display-name="Example Resource Driver for Dynamic Resource Allocation (DRA)"
 LABEL name="Example Resource Driver for Dynamic Resource Allocation (DRA)"
 LABEL vendor="example.com"
