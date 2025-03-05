@@ -24,6 +24,7 @@ set -o pipefail
 CURRENT_DIR="$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd)"
 
 chmod +x "${CURRENT_DIR}/scripts/create-minikube-cluster.sh"
+chmod +x "${CURRENT_DIR}/install-dra-driver.sh"
 
 source "${CURRENT_DIR}/scripts/common.sh"
 
