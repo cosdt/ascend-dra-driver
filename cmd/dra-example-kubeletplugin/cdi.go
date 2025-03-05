@@ -85,11 +85,13 @@ func (cdi *CDIHandler) CreateCommonSpecFile() error {
 // CreateClaimSpecFile 为给定 claim 创建临时 CDI spec 文件
 // 修改点：将所有分配到的设备名称聚合后，以环境变量 ASCEND_VISIBLE_DEVICES 注入到 Pod 中
 func (cdi *CDIHandler) CreateClaimSpecFile(claimUID string, devices PreparedDevices) error {
-	var deviceNames []string
+	var logicIDs []string
 	for _, device := range devices {
-		deviceNames = append(deviceNames, device.DeviceName)
+		// 假设 device.DeviceName 形如 "npu-<LogicID>"
+		logicID := strings.TrimPrefix(device.DeviceName, "npu-")
+		logicIDs = append(logicIDs, logicID)
 	}
-	visibleDevices := strings.Join(deviceNames, ",")
+	visibleDevices := strings.Join(logicIDs, ",")
 
 	specName := cdiapi.GenerateTransientSpecName(cdiVendor, cdiClass, claimUID)
 
@@ -105,11 +107,6 @@ func (cdi *CDIHandler) CreateClaimSpecFile(claimUID string, devices PreparedDevi
 						fmt.Sprintf("ASCEND_VISIBLE_DEVICES=%s", visibleDevices),
 					},
 				},
-			},
-		},
-		ContainerEdits: cdispec.ContainerEdits{
-			Env: []string{
-				fmt.Sprintf("ASCEND_VISIBLE_DEVICES=%s", visibleDevices),
 			},
 		},
 	}
