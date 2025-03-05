@@ -14,14 +14,33 @@
 ```bash
 ./demo/build-driver.sh
 
-helm upgrade -i \
-  --create-namespace \
-  --namespace dra-example-driver \
-  dra-example-driver \
-  deployments/helm/dra-example-driver
+# 安装
+./demo/install-dra-driver.sh
 ```
 
-3. （可选）替换k8s组件，以调度器为案例。 参考： [K8s远程调试，你的姿势对了吗？](https://cloud.tencent.com/developer/article/1624638)
+3. 编译并启动开发版dra驱动
+```bash
+# 编译dra驱动
+cd ./dev/dra
+./build_dra.sh
+
+# 同步开发编译版dra驱动及调试工具到dra驱动容器
+./all_cp.sh
+
+# 进入dra驱动容器
+./pod_into_dra.sh
+
+# 进入/root目录
+cd
+
+# 启动调试
+./start_debug.sh
+
+# 在本地开发环境使用远程调试配置连接
+# zjknps.jieshi.space:9341
+```
+
+4. （可选）替换k8s组件，以调度器为案例。 参考： [K8s远程调试，你的姿势对了吗？](https://cloud.tencent.com/developer/article/1624638)
 ```bash
 # 复制调试工具及可调试版本二进制
 cd ./dev/node
@@ -45,26 +64,4 @@ cd
 # 使用远程调试配置连接
 zjknps.jieshi.space:9523
 
-```
-
-4. 编译并启动开发版dra驱动
-```bash
-# 编译dra驱动
-cd ./dev/dra
-./build_dra.sh
-
-# 同步开发编译版dra驱动及调试工具到dra驱动容器
-./all_cp.sh
-
-# 进入dra驱动容器
-./pod_into_dra.sh
-
-# 进入/root目录
-cd
-
-# 启动调试
-./start_debug.sh
-
-# 使用远程调试配置连接
-zjknps.jieshi.space:9341
 ```
