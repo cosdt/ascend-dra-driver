@@ -30,4 +30,7 @@ minikube start \
 # 打开CDI
 docker exec "${MINIKUBE_PROFILE_NAME}" sed -i '/\[plugins."io.containerd.grpc.v1.cri"\]/a \    enable_cdi = true' /etc/containerd/config.toml
 
+# 设置默认
+minikube profile "${MINIKUBE_PROFILE_NAME}"
+
 echo "Minikube cluster (${MINIKUBE_PROFILE_NAME}) is ready!"
