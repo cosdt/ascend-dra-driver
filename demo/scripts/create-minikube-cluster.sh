@@ -27,12 +27,4 @@ minikube start \
   --mount-string="/usr/local/Ascend/driver:/usr/local/Ascend/driver" \
   --wait=all
 
-# **修改 containerd 配置**
-minikube ssh --profile="${MINIKUBE_PROFILE_NAME}" <<EOF
-  sudo sed -i -r 's|^( *)sandbox_image = .*$|\1sandbox_image = "registry.k8s.io/pause:3.10"|' /etc/containerd/config.toml
-  echo '[plugins."io.containerd.grpc.v1.cri"]' | sudo tee -a /etc/containerd/config.toml
-  echo '  enable_cdi = true' | sudo tee -a /etc/containerd/config.toml
-  sudo systemctl restart containerd
-EOF
-
 echo "Minikube cluster (${MINIKUBE_PROFILE_NAME}) is ready!"
