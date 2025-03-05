@@ -2,6 +2,7 @@
 
 ## 前置条件
 - 获取多个二进制 参考： [.gitkeep](dev/tools/.gitkeep)
+  - 注意环境是arm还是amd
 - 安装kind环境（k8s为 v1.32.0 版本）
 
 ## 环境配置
