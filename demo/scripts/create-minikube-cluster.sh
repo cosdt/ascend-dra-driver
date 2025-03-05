@@ -27,4 +27,7 @@ minikube start \
   --mount-string="/usr/local/Ascend/driver:/usr/local/Ascend/driver" \
   --wait=all
 
+# 打开CDI
+docker exec "${MINIKUBE_PROFILE_NAME}" sed -i '/\[plugins."io.containerd.grpc.v1.cri"\]/a \    enable_cdi = true' /etc/containerd/config.toml
+
 echo "Minikube cluster (${MINIKUBE_PROFILE_NAME}) is ready!"
