@@ -12,7 +12,7 @@
    limitations under the License.
 */
 
-// Package server holds the implementation of registration to kubelet, k8s device plugin interface and grpc service.
+// Package server 包含向kubelet注册、k8s设备插件接口和grpc服务的实现。
 package server
 
 import (
@@ -33,7 +33,7 @@ func (ps *PluginServer) stopListAndWatch() {
 	}
 }
 
-// Notify is called when device status changed, to notify ListAndWatch
+// Notify 当设备状态变化时调用，通知ListAndWatch
 func (ps *PluginServer) Notify(devices []*common.NpuDevice) bool {
 	if ps == nil {
 
@@ -48,10 +48,10 @@ func (ps *PluginServer) Notify(devices []*common.NpuDevice) bool {
 }
 
 // getUnhealthyAICore
-// for example:
+// 例如：
 // aicore-0, aicore-22: Ascend310P-2c-100-0
-// if Ascend310P-0 is unhealthy, aicore-0, aicore-22 is unhealthy
-// Ascend310P-0 has 8 aicore, and should select 6 free aicore to be set unhealthy
+// 如果Ascend310P-0不健康，aicore-0, aicore-22也不健康
+// Ascend310P-0有8个aicore，应该选择6个空闲aicore设置为不健康
 func (ps *PluginServer) getUnhealthyAICore() sets.String {
 	unhealthyAICore := sets.String{}
 	return unhealthyAICore

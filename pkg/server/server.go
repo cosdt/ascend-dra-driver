@@ -12,16 +12,16 @@
    limitations under the License.
 */
 
-// Package server holds the implementation of registration to kubelet, k8s device plugin interface and grpc service.
+// Package server 包含向kubelet注册、k8s设备插件接口和grpc服务的实现。
 package server
 
 import (
 	"sigs.k8s.io/dra-example-driver/pkg/common"
 )
 
-// Start starts the gRPC server, registers the device plugin with the Kubelet
+// Start 启动gRPC服务器，向Kubelet注册设备插件
 func (ps *PluginServer) Start(socketWatcher *common.FileWatch) error {
-	// clean
+	// 清理
 	ps.Stop()
 
 	var err error
@@ -31,7 +31,7 @@ func (ps *PluginServer) Start(socketWatcher *common.FileWatch) error {
 	return err
 }
 
-// Stop the gRPC server
+// Stop 停止gRPC服务器
 func (ps *PluginServer) Stop() {
 	ps.isRunning.Store(false)
 
@@ -44,12 +44,12 @@ func (ps *PluginServer) Stop() {
 	return
 }
 
-// GetRestartFlag get restart flag
+// GetRestartFlag 获取重启标志
 func (ps *PluginServer) GetRestartFlag() bool {
 	return ps.restart
 }
 
-// SetRestartFlag set restart flag
+// SetRestartFlag 设置重启标志
 func (ps *PluginServer) SetRestartFlag(flag bool) {
 	ps.restart = flag
 }

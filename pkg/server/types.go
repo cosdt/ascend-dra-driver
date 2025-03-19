@@ -12,7 +12,7 @@
    limitations under the License.
 */
 
-// Package server holds the implementation of registration to kubelet, k8s device plugin interface and grpc service.
+// Package server 包含向kubelet注册、k8s设备插件接口和grpc服务的实现。
 package server
 
 import (
@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/dra-example-driver/pkg/device"
 )
 
-// InterfaceServer interface for object that keeps running for providing service
+// InterfaceServer 为提供服务而持续运行的对象接口
 type InterfaceServer interface {
 	Start(*common.FileWatch) error
 	Stop()
@@ -32,7 +32,7 @@ type InterfaceServer interface {
 	SetRestartFlag(bool)
 }
 
-// PluginServer implements the interface of DevicePluginServer; manages the registration and lifecycle of grpc server
+// PluginServer 实现DevicePluginServer接口；管理grpc服务器的注册和生命周期
 type PluginServer struct {
 	manager              device.DevManager
 	grpcServer           *grpc.Server
@@ -49,13 +49,13 @@ type PluginServer struct {
 	restart              bool
 }
 
-// PodDevice define device info in pod
+// PodDevice 定义Pod中的设备信息
 type PodDevice struct {
 	ResourceName string
 	DeviceIds    []string
 }
 
-// PodDeviceInfo define device info of pod, include kubelet allocate and real allocate device
+// PodDeviceInfo 定义Pod的设备信息，包括kubelet分配和实际分配的设备
 type PodDeviceInfo struct {
 	Pod        v1.Pod
 	KltDevice  []string
