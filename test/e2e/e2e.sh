@@ -18,9 +18,9 @@
 
 set -e
 
-kind get clusters
+minikube status
 kubectl get nodes
-kubectl wait --for=condition=Ready nodes/dra-example-driver-cluster-worker --timeout=120s
+kubectl wait --for=condition=Ready nodes/minikube --timeout=120s
 kubectl create -f demo/npu-test1.yaml
 kubectl create -f demo/npu-test2.yaml
 kubectl create -f demo/npu-test3.yaml
