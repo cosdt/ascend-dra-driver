@@ -27,7 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
-	"sigs.k8s.io/dra-example-driver/pkg/common"
+	"Ascend-dra-driver/pkg/common"
 )
 
 // TryUpdatePodAnnotation is to try updating pod annotation

@@ -32,8 +32,8 @@
 ### 演示
 首先克隆此仓库并进入目录。此演示中使用的所有脚本和示例Pod规范都包含在这里，花点时间浏览各个文件，看看有哪些内容：
 ```
-git clone https://github.com/kubernetes-sigs/dra-example-driver.git
-cd dra-example-driver
+git clone https://github.com/kubernetes-sigs/ascend-dra-driver.git
+cd ascend-dra-driver
 ```
 
 **注意**：脚本将自动使用PATH中找到的`docker`或`podman`作为容器工具命令。要覆盖此行为，可以通过调用`export CONTAINER_TOOL=docker`设置`CONTAINER_TOOL`环境变量，或者在脚本前加上`CONTAINER_TOOL=docker`（例如`CONTAINER_TOOL=docker ./path/to/script.sh`）。请记住，构建Kind镜像目前需要Docker。
@@ -54,14 +54,14 @@ $ kubectl get pod -A
 NAMESPACE            NAME                                                               READY   STATUS    RESTARTS   AGE
 kube-system          coredns-5d78c9869d-6jrx9                                           1/1     Running   0          1m
 kube-system          coredns-5d78c9869d-dpr8p                                           1/1     Running   0          1m
-kube-system          etcd-dra-example-driver-cluster-control-plane                      1/1     Running   0          1m
+kube-system          etcd-ascend-dra-driver-cluster-control-plane                      1/1     Running   0          1m
 kube-system          kindnet-g88bv                                                      1/1     Running   0          1m
 kube-system          kindnet-msp95                                                      1/1     Running   0          1m
-kube-system          kube-apiserver-dra-example-driver-cluster-control-plane            1/1     Running   0          1m
-kube-system          kube-controller-manager-dra-example-driver-cluster-control-plane   1/1     Running   0          1m
+kube-system          kube-apiserver-ascend-dra-driver-cluster-control-plane            1/1     Running   0          1m
+kube-system          kube-controller-manager-ascend-dra-driver-cluster-control-plane   1/1     Running   0          1m
 kube-system          kube-proxy-kgz4z                                                   1/1     Running   0          1m
 kube-system          kube-proxy-x6fnd                                                   1/1     Running   0          1m
-kube-system          kube-scheduler-dra-example-driver-cluster-control-plane            1/1     Running   0          1m
+kube-system          kube-scheduler-ascend-dra-driver-cluster-control-plane            1/1     Running   0          1m
 local-path-storage   local-path-provisioner-7dbf974f64-9jmc7                            1/1     Running   0          1m
 ```
 
@@ -69,16 +69,16 @@ local-path-storage   local-path-provisioner-7dbf974f64-9jmc7                    
 ```bash
 helm upgrade -i \
   --create-namespace \
-  --namespace dra-example-driver \
-  dra-example-driver \
-  deployments/helm/dra-example-driver
+  --namespace ascend-dra-driver \
+  ascend-dra-driver \
+  deployments/helm/ascend-dra-driver
 ```
 
 检查驱动程序组件是否已成功启动：
 ```console
-$ kubectl get pod -n dra-example-driver
+$ kubectl get pod -n ascend-dra-driver
 NAME                                             READY   STATUS    RESTARTS   AGE
-dra-example-driver-kubeletplugin-qwmbl           1/1     Running   0          1m
+ascend-dra-driver-kubeletplugin-qwmbl           1/1     Running   0          1m
 ```
 
 并显示工作节点上可用NPU设备的初始状态：

@@ -2,13 +2,13 @@
 vendor/
 [._]*.sw[a-p]
 
-./dra-example-kubeletplugin
+./ascend-dra-kubeletplugin
 
 driver_image.tar
 dev/tools/dlv
 dev/tools/dlv
 dev/tools/dlv_client
-dev/tools/dra-example-kubeletplugin
+dev/tools/ascend-dra-kubeletplugin
 dev/tools/kube-apiserver
 dev/tools/kube-controller-manager
 dev/tools/kube-scheduler
@@ -16,3 +16,4 @@ dev/tools/kubelet
 dev/tools/npc
 .config
 .idea
+dev/tools/dra-example-kubeletplugin

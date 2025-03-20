@@ -26,7 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
-	"sigs.k8s.io/dra-example-driver/pkg/common"
+	"Ascend-dra-driver/pkg/common"
 )
 
 // ClientK8s include ClientK8sSet & nodeName & configmap name

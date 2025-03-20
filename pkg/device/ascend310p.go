@@ -18,7 +18,7 @@ package device
 import (
 	"fmt"
 
-	"sigs.k8s.io/dra-example-driver/pkg/common"
+	"Ascend-dra-driver/pkg/common"
 )
 
 // HwAscend310PManager manages huawei Ascend310P devices.

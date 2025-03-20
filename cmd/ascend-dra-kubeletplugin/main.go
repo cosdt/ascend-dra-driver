@@ -28,7 +28,7 @@ import (
 	coreclientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 
-	"sigs.k8s.io/dra-example-driver/pkg/flags"
+	"Ascend-dra-driver/pkg/flags"
 )
 
 const (

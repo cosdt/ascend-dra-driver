@@ -23,8 +23,8 @@ import (
 
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"sigs.k8s.io/dra-example-driver/pkg/common"
-	"sigs.k8s.io/dra-example-driver/pkg/device"
+	"Ascend-dra-driver/pkg/common"
+	"Ascend-dra-driver/pkg/device"
 )
 
 func (ps *PluginServer) stopListAndWatch() {

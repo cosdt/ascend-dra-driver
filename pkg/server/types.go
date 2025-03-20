@@ -20,8 +20,8 @@ import (
 
 	"google.golang.org/grpc"
 	"k8s.io/api/core/v1"
-	"sigs.k8s.io/dra-example-driver/pkg/common"
-	"sigs.k8s.io/dra-example-driver/pkg/device"
+	"Ascend-dra-driver/pkg/common"
+	"Ascend-dra-driver/pkg/device"
 )
 
 // InterfaceServer 为提供服务而持续运行的对象接口

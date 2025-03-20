@@ -1,4 +1,4 @@
-module sigs.k8s.io/dra-example-driver
+module Ascend-dra-driver
 
 go 1.23.1
 

@@ -16,7 +16,7 @@
 package server
 
 import (
-	"sigs.k8s.io/dra-example-driver/pkg/common"
+	"Ascend-dra-driver/pkg/common"
 )
 
 // Start 启动gRPC服务器，向Kubelet注册设备插件

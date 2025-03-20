@@ -26,9 +26,9 @@ import (
 	"huawei.com/npu-exporter/v5/devmanager"
 	"k8s.io/apimachinery/pkg/util/wait"
 
-	"sigs.k8s.io/dra-example-driver/pkg/common"
-	"sigs.k8s.io/dra-example-driver/pkg/device"
-	"sigs.k8s.io/dra-example-driver/pkg/kubeclient"
+	"Ascend-dra-driver/pkg/common"
+	"Ascend-dra-driver/pkg/device"
+	"Ascend-dra-driver/pkg/kubeclient"
 )
 
 // HwDevManager manages huawei device devices.
