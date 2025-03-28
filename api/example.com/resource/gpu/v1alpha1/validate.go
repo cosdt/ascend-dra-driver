@@ -70,5 +70,25 @@ func (c *GpuConfig) Validate() error {
 	if c.Sharing == nil {
 		return fmt.Errorf("no sharing strategy set")
 	}
-	return c.Sharing.Validate()
+
+	if err := c.Sharing.Validate(); err != nil {
+		return err
+	}
+
+	// 验证VnpuSpec
+	if c.VnpuSpec != nil {
+		if err := c.VnpuSpec.Validate(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// Validate ensures that VnpuSpec has a valid set of values.
+func (v *VnpuSpec) Validate() error {
+	if v.TemplateName == "" {
+		return fmt.Errorf("vNPU模板名称不能为空")
+	}
+	return nil
 }

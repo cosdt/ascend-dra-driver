@@ -38,6 +38,13 @@ func enumerateAllPossibleDevices() (AllocatableDevices, error) {
 	hdm := server.NewHwDevManager(devM)
 	allInfo := hdm.AllInfo
 
+	// 初始化vNPU管理器
+	vnpuManager, err := NewVnpuManager()
+	if err != nil {
+		log.Printf("初始化vNPU管理器失败: %v，将只支持整卡分配", err)
+		// 即使初始化失败，仍然继续，只不过不支持vNPU分配
+	}
+
 	alldevices := make(AllocatableDevices)
 	// 遍历所有设备，根据实际硬件信息构造 resourceapi.Device 对象
 	for _, dev := range allInfo.AllDevs {
@@ -46,20 +53,54 @@ func enumerateAllPossibleDevices() (AllocatableDevices, error) {
 		// 生成设备唯一标识（例如使用 NODE_NAME 和设备ID 拼接）
 		uuidStr := fmt.Sprintf("%s-%d", os.Getenv("NODE_NAME"), dev.LogicID)
 
+		// 构建基本设备属性
+		devAttributes := map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
+			"index": {IntValue: ptr.To(int64(dev.LogicID))},
+			"uuid":  {StringValue: ptr.To(uuidStr)},
+			"model": {StringValue: ptr.To(dev.DevType)},
+		}
+
+		// 添加vNPU模板信息作为设备属性
+		if vnpuManager != nil {
+			// 初始化物理NPU
+			vnpuManager.InitPhysicalNpu(deviceName, dev.LogicID)
+
+			// 添加支持的vNPU模板属性
+			physicalNpu := vnpuManager.PhysicalNpus[deviceName]
+			if physicalNpu != nil {
+				for name, template := range physicalNpu.SupportTemplates {
+					attrName := fmt.Sprintf("template.%s.aicore", name)
+					devAttributes[resourceapi.QualifiedName(attrName)] = resourceapi.DeviceAttribute{
+						IntValue: ptr.To(int64(template.Attributes.AICORE)),
+					}
+
+					attrName = fmt.Sprintf("template.%s.memory", name)
+					devAttributes[resourceapi.QualifiedName(attrName)] = resourceapi.DeviceAttribute{
+						IntValue: ptr.To(int64(template.Attributes.Memory)),
+					}
+
+					attrName = fmt.Sprintf("template.%s.aicpu", name)
+					devAttributes[resourceapi.QualifiedName(attrName)] = resourceapi.DeviceAttribute{
+						IntValue: ptr.To(int64(template.Attributes.AICPU)),
+					}
+
+					// 添加更多vNPU模板属性...
+				}
+			}
+		}
+
 		device := resourceapi.Device{
 			Name: deviceName,
 			Basic: &resourceapi.BasicDevice{
-				Attributes: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
-					"index": {IntValue: ptr.To(int64(dev.LogicID))},
-					"uuid":  {StringValue: ptr.To(uuidStr)},
-					"model": {StringValue: ptr.To(dev.DevType)},
-				},
+				Attributes: devAttributes,
 				Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
 					"memory": {Value: resource.MustParse("32Gi")},
 				},
 			},
 		}
 		alldevices[device.Name] = device
+
+		log.Printf("发现NPU设备: %s, 型号: %s", deviceName, dev.DevType)
 	}
 	return alldevices, nil
 }
