@@ -45,15 +45,15 @@ type OpaqueDeviceConfig struct {
 
 // VnpuTemplateAttribute 存储vNPU模板的各项资源属性
 type VnpuTemplateAttribute struct {
-	AICORE  int
-	Memory  int // 单位GB
-	AICPU   int
-	VPC     int
-	PNGD    int
-	VENC    int
-	VDEC    int
-	JPEGD   int
-	JPEGE   int
+	AICORE int
+	Memory int // 单位GB
+	AICPU  int
+	VPC    int
+	PNGD   int
+	VENC   int
+	VDEC   int
+	JPEGD  int
+	JPEGE  int
 }
 
 // VnpuTemplate 表示一个vNPU模板
@@ -71,10 +71,10 @@ type VnpuSlice struct {
 
 // PhysicalNpuState 维护一个物理NPU卡的状态
 type PhysicalNpuState struct {
-	DeviceName       string              // 设备名称，例如: npu-0
-	LogicID          int                 // 逻辑ID
-	AvailableSlices  []*VnpuSlice        // 可用的vNPU分片
-	AllocatedSlices  []*VnpuSlice        // 已分配的vNPU分片
+	DeviceName       string                   // 设备名称，例如: npu-0
+	LogicID          int32                    // 逻辑ID
+	AvailableSlices  []*VnpuSlice             // 可用的vNPU分片
+	AllocatedSlices  []*VnpuSlice             // 已分配的vNPU分片
 	SupportTemplates map[string]*VnpuTemplate // 支持的所有模板
 }
 
@@ -261,7 +261,7 @@ func (s *DeviceState) prepareDevices(claim *resourceapi.ResourceClaim) (Prepared
 	configResultsMap := make(map[runtime.Object][]*resourceapi.DeviceRequestAllocationResult)
 	for _, result := range claim.Status.Allocation.Devices.Results {
 		origDevice := result.Device
-		
+
 		// 检查是否请求了vNPU分片
 		if requestedTemplate != "" && s.vnpuManager != nil {
 			// 分配vNPU分片
@@ -272,7 +272,7 @@ func (s *DeviceState) prepareDevices(claim *resourceapi.ResourceClaim) (Prepared
 			} else {
 				// 替换设备ID为分片ID
 				result.Device = slice.SliceID
-				log.Printf("成功为设备 %s 分配vNPU分片: %s, 模板: %s", 
+				log.Printf("成功为设备 %s 分配vNPU分片: %s, 模板: %s",
 					origDevice, slice.SliceID, requestedTemplate)
 			}
 		} else {
@@ -286,7 +286,7 @@ func (s *DeviceState) prepareDevices(claim *resourceapi.ResourceClaim) (Prepared
 				}
 			}
 		}
-		
+
 		if _, exists := s.allocatable[origDevice]; !exists {
 			return nil, fmt.Errorf("requested NPU is not allocatable: %v", origDevice)
 		}
@@ -347,16 +347,16 @@ func (s *DeviceState) prepareDevices(claim *resourceapi.ResourceClaim) (Prepared
 
 func (s *DeviceState) unprepareDevices(claimUID string, devices PreparedDevices) error {
 	log.Printf("开始释放设备，claimUID: %s", claimUID)
-	
+
 	// 如果没有vNPU管理器，直接返回成功
 	if s.vnpuManager == nil {
 		return nil
 	}
-	
+
 	// 遍历所有设备，释放对应的vNPU分片
 	for _, device := range devices {
 		deviceID := device.Device.DeviceName
-		
+
 		err := s.vnpuManager.ReleaseSlice(deviceID)
 		if err != nil {
 			log.Printf("警告: 释放vNPU分片 %s 失败: %v", deviceID, err)
@@ -365,7 +365,7 @@ func (s *DeviceState) unprepareDevices(claimUID string, devices PreparedDevices)
 			log.Printf("成功释放vNPU分片: %s", deviceID)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -377,24 +377,24 @@ func (s *DeviceState) applyConfig(config *configapi.GpuConfig, results []*resour
 			fmt.Sprintf("NPU_DEVICE_%s=%s", result.Device[4:], result.Device),
 			fmt.Sprintf("ASCEND_VISIBLE_DEVICES=%s", result.Device[4:]), // 设置ASCEND_VISIBLE_DEVICES为NPU的LogicID
 		}
-		
+
 		// 检查是否需要设置vNPU规格
 		if s.vnpuManager != nil {
 			// 需要区分是分片ID还是物理设备ID
 			// 如果是整卡分配，那么是物理设备ID
 			// 如果是vNPU分配，那么需要查找到对应的模板名称
-			
+
 			deviceID := result.Device
-			
+
 			// 检查是否为分片的命名模式 npu-x-y
 			isSlice := false
 			var sliceID string
-			
+
 			sliceMatched, err := fmt.Sscanf(deviceID, "%s-%d-%d", &sliceID, &sliceID, &sliceID)
 			if err == nil && sliceMatched == 3 {
 				isSlice = true
 			}
-			
+
 			if isSlice {
 				// 如果是vNPU分片，获取对应的模板名称
 				vnpuSpec, err := s.vnpuManager.GetVnpuSpecsEnv(deviceID)

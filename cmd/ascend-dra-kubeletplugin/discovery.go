@@ -18,14 +18,16 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"math/rand"
 	"os"
+
+	"Ascend-dra-driver/pkg/server"
 
 	"huawei.com/npu-exporter/v5/devmanager"
 	resourceapi "k8s.io/api/resource/v1beta1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/utils/ptr"
-	"Ascend-dra-driver/pkg/server"
 
 	"github.com/google/uuid"
 )
