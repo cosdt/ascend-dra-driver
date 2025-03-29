@@ -29,19 +29,19 @@ import (
 // 获取NPU支持的模板信息
 func GetNpuTemplateInfo() (map[string]*VnpuTemplate, error) {
 	log.Println("开始获取NPU模板信息...")
-	
+
 	// 从挂载文件读取模板信息
 	templateFilePath := "/etc/npu/template-info.txt"
 	content, err := os.ReadFile(templateFilePath)
 	if err != nil {
 		// 如果找不到文件，尝试创建模拟数据（便于测试）
 		log.Printf("读取模板信息文件失败: %v, 将使用模拟数据", err)
-		
+
 		// 创建示例模板数据
 		templates := createDefaultTemplates()
 		return templates, nil
 	}
-	
+
 	templates := make(map[string]*VnpuTemplate)
 	err = parseTemplateInfo(string(content), templates)
 	if err != nil {
@@ -55,7 +55,7 @@ func GetNpuTemplateInfo() (map[string]*VnpuTemplate, error) {
 // 创建默认模板数据（当无法从文件读取时使用）
 func createDefaultTemplates() map[string]*VnpuTemplate {
 	templates := make(map[string]*VnpuTemplate)
-	
+
 	// 添加一些默认模板
 	templates["vir01"] = &VnpuTemplate{
 		Name: "vir01",
@@ -64,7 +64,7 @@ func createDefaultTemplates() map[string]*VnpuTemplate {
 			Memory: 8,
 		},
 	}
-	
+
 	templates["vir02"] = &VnpuTemplate{
 		Name: "vir02",
 		Attributes: VnpuTemplateAttribute{
@@ -72,7 +72,7 @@ func createDefaultTemplates() map[string]*VnpuTemplate {
 			Memory: 12,
 		},
 	}
-	
+
 	templates["vir04"] = &VnpuTemplate{
 		Name: "vir04",
 		Attributes: VnpuTemplateAttribute{
@@ -80,7 +80,7 @@ func createDefaultTemplates() map[string]*VnpuTemplate {
 			Memory: 16,
 		},
 	}
-	
+
 	log.Printf("使用默认模板数据，共%d个模板", len(templates))
 	return templates
 }
@@ -125,6 +125,7 @@ func parseTemplateInfo(output string, templates map[string]*VnpuTemplate) error 
 
 	for scanner.Scan() {
 		line := scanner.Text()
+		line = strings.Trim(line, "|")
 		if strings.TrimSpace(line) == "" || strings.Contains(line, "--") {
 			continue
 		}
@@ -150,7 +151,7 @@ func parseTemplateInfo(output string, templates map[string]*VnpuTemplate) error 
 						currentAttrs.AICORE = val
 					case "Memory":
 						currentAttrs.Memory = val
-					// 移除其他属性，只保留AICORE和Memory
+						// 移除其他属性，只保留AICORE和Memory
 					}
 				}
 			}
