@@ -24,7 +24,7 @@ minikube start \
   --extra-config=scheduler.v=1 \
   --extra-config=kubelet.v=1 \
   --mount \
-  --mount-string="/usr/local/Ascend/driver:/usr/local/Ascend/driver" \
+  --mount-string="/:/" \
   --wait=all
 
 # 打开CDI
