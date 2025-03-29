@@ -110,18 +110,7 @@ func parseTemplateInfo(output string, templates map[string]*VnpuTemplate) error 
 						currentAttrs.AICORE = val
 					case "Memory":
 						currentAttrs.Memory = val
-					case "AICPU":
-						currentAttrs.AICPU = val
-					case "VPC":
-						currentAttrs.VPC = val
-					case "VENC":
-						currentAttrs.VENC = val
-					case "VDEC":
-						currentAttrs.VDEC = val
-					case "JPEGD":
-						currentAttrs.JPEGD = val
-					case "JPEGE":
-						currentAttrs.JPEGE = val
+					// 移除其他属性，只保留AICORE和Memory
 					}
 				}
 			}
@@ -131,21 +120,8 @@ func parseTemplateInfo(output string, templates map[string]*VnpuTemplate) error 
 				Attributes: *currentAttrs,
 			}
 		} else if currentTemplate != "" && len(fields) > 1 {
-			// 这是附加属性行
-			for attr, pos := range columnPositions {
-				if pos < len(fields) && attr != "Name" && fields[pos] != "" {
-					val, err := strconv.Atoi(fields[pos])
-					if err != nil {
-						log.Printf("警告：解析附加属性 %s 的值 %s 失败: %v", attr, fields[pos], err)
-						continue
-					}
-
-					switch attr {
-					case "PNGD":
-						currentAttrs.PNGD = val
-					}
-				}
-			}
+			// 这是附加属性行 - 由于我们只关心AICORE和Memory，不需要处理这些附加属性
+			// 保留这个逻辑结构，但不再尝试解析其他字段
 		}
 	}
 
