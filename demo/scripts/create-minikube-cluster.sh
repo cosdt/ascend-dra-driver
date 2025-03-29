@@ -24,7 +24,7 @@ minikube start \
   --extra-config=scheduler.v=1 \
   --extra-config=kubelet.v=1 \
   --mount \
-  --mount --mount-string="/usr/local:/usr/local" \
+  --mount --mount-string="/usr/local:/usr/local2" \
   --wait=all
 
 # 打开CDI
