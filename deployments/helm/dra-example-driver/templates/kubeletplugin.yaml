@@ -70,7 +70,7 @@ spec:
         - name: pod-resource
           mountPath: /var/lib/kubelet/pod-resources
         - name: hiai-driver
-          mountPath: /usr/local/Ascend/driver
+          mountPath: /usr/local/Ascend
           readOnly: true
         - name: tmp
           mountPath: /tmp
@@ -92,7 +92,7 @@ spec:
           path: /var/lib/kubelet/pod-resources
       - name: hiai-driver
         hostPath:
-          path: /usr/local/Ascend/driver
+          path: /usr/local/Ascend
       - name: tmp
         hostPath:
           path: /tmp
