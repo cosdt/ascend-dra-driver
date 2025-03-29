@@ -89,7 +89,7 @@ func createDefaultTemplates() map[string]*VnpuTemplate {
 func parseTemplateInfo(output string, templates map[string]*VnpuTemplate) error {
 	scanner := bufio.NewScanner(strings.NewReader(output))
 
-	// 查找表头行
+	// 1. 找第一行表头（含Name、AICORE、Memory）
 	headerLine := ""
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -98,21 +98,24 @@ func parseTemplateInfo(output string, templates map[string]*VnpuTemplate) error 
 			break
 		}
 	}
-
 	if headerLine == "" {
 		return fmt.Errorf("未找到模板信息表头")
 	}
 
+	// 2. 解析表头
 	headerLine = strings.Trim(headerLine, "|")
-	// 解析表头，确定各列位置
 	headerFields := regexp.MustCompile(`\s+`).Split(strings.TrimSpace(headerLine), -1)
 	columnPositions := make(map[string]int)
-
 	for i, field := range headerFields {
 		columnPositions[field] = i
 	}
 
-	// 跳过分隔行
+	// 3. 跳过表头的下一行（即带 "GB PNGD VDEC JPEGE" 的那行）
+	if scanner.Scan() {
+		// 不做任何处理，直接丢弃
+	}
+
+	// 4. 再继续跳过，直到找到包含"=="的分隔行
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.Contains(line, "==") {
@@ -120,50 +123,62 @@ func parseTemplateInfo(output string, templates map[string]*VnpuTemplate) error 
 		}
 	}
 
-	// 处理模板数据
-	currentTemplate := ""
+	// 5. 解析表格内容
+	var currentTemplate string
 	var currentAttrs *VnpuTemplateAttribute
-
 	for scanner.Scan() {
 		line := scanner.Text()
+		// 去掉左右的 "|"
 		line = strings.Trim(line, "|")
-		if strings.TrimSpace(line) == "" || strings.Contains(line, "--") {
+		line = strings.TrimSpace(line)
+
+		// 空行或分隔符行跳过
+		if line == "" || strings.Contains(line, "--") {
 			continue
 		}
 
-		fields := regexp.MustCompile(`\s+`).Split(strings.TrimSpace(line), -1)
+		// 按空格分割
+		fields := regexp.MustCompile(`\s+`).Split(line, -1)
 
+		// 第一列如果有内容，说明是一个新的模板行
 		if len(fields) > 0 && fields[0] != "" {
-			// 这是模板名称行
 			currentTemplate = fields[0]
 			currentAttrs = &VnpuTemplateAttribute{}
 
-			// 解析属性
+			// 提取 AICORE 和 Memory
 			for attr, pos := range columnPositions {
-				if pos < len(fields) && attr != "Name" {
-					val, err := strconv.Atoi(fields[pos])
+				// 不处理 "Name" 本身
+				if attr == "Name" {
+					continue
+				}
+				if pos < len(fields) {
+					valStr := fields[pos]
+					// 如果是Memory列，去掉"GB"
+					if attr == "Memory" {
+						valStr = strings.TrimSuffix(valStr, "GB")
+					}
+					val, err := strconv.Atoi(valStr)
 					if err != nil {
 						log.Printf("警告：解析属性 %s 的值 %s 失败: %v", attr, fields[pos], err)
 						continue
 					}
-
 					switch attr {
 					case "AICORE":
 						currentAttrs.AICORE = val
 					case "Memory":
 						currentAttrs.Memory = val
-						// 移除其他属性，只保留AICORE和Memory
 					}
 				}
 			}
 
+			// 存入map
 			templates[currentTemplate] = &VnpuTemplate{
 				Name:       currentTemplate,
 				Attributes: *currentAttrs,
 			}
 		} else if currentTemplate != "" && len(fields) > 1 {
-			// 这是附加属性行 - 由于我们只关心AICORE和Memory，不需要处理这些附加属性
-			// 保留这个逻辑结构，但不再尝试解析其他字段
+			// 这是附加属性行(比如VPC/VENC等)，由于我们只关心AICORE和Memory，直接跳过即可
+			continue
 		}
 	}
 
