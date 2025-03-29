@@ -70,23 +70,25 @@ func enumerateAllPossibleDevices() (AllocatableDevices, error) {
 			// 添加支持的vNPU模板属性
 			physicalNpu := vnpuManager.PhysicalNpus[deviceName]
 			if physicalNpu != nil {
-				for name, template := range physicalNpu.SupportTemplates {
-					attrName := fmt.Sprintf("template.%s.aicore", name)
-					devAttributes[resourceapi.QualifiedName(attrName)] = resourceapi.DeviceAttribute{
-						IntValue: ptr.To(int64(template.Attributes.AICORE)),
-					}
+				// 找出当前支持的最大算力属性
+				maxAicore := 0
+				maxMemory := 0
 
-					attrName = fmt.Sprintf("template.%s.memory", name)
-					devAttributes[resourceapi.QualifiedName(attrName)] = resourceapi.DeviceAttribute{
-						IntValue: ptr.To(int64(template.Attributes.Memory)),
+				for _, template := range physicalNpu.SupportTemplates {
+					if template.Attributes.AICORE > maxAicore {
+						maxAicore = template.Attributes.AICORE
 					}
-
-					attrName = fmt.Sprintf("template.%s.aicpu", name)
-					devAttributes[resourceapi.QualifiedName(attrName)] = resourceapi.DeviceAttribute{
-						IntValue: ptr.To(int64(template.Attributes.AICPU)),
+					if template.Attributes.Memory > maxMemory {
+						maxMemory = template.Attributes.Memory
 					}
+				}
 
-					// 添加更多vNPU模板属性...
+				// 将最大算力属性作为设备属性
+				devAttributes["aicore"] = resourceapi.DeviceAttribute{
+					IntValue: ptr.To(int64(maxAicore)),
+				}
+				devAttributes["memory"] = resourceapi.DeviceAttribute{
+					IntValue: ptr.To(int64(maxMemory)),
 				}
 			}
 		}

@@ -1,0 +1,93 @@
+# 混合使用整卡和vNPU分片
+# 演示在集群中同时运行使用整卡和vNPU分片的Pod
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: npu-vnpu-test5
+
+---
+# 整卡分配的ResourceClaimTemplate
+apiVersion: resource.k8s.io/v1beta1
+kind: ResourceClaimTemplate
+metadata:
+  namespace: npu-vnpu-test5
+  name: npu-whole-card
+spec:
+  spec:
+    devices:
+      requests:
+      - name: npu
+        deviceClassName: npu.example.com
+        # 这里可以不使用选择器，会默认分配可用的整卡
+
+---
+# vNPU分片分配的ResourceClaimTemplate
+apiVersion: resource.k8s.io/v1beta1
+kind: ResourceClaimTemplate
+metadata:
+  namespace: npu-vnpu-test5
+  name: vnpu-slice-vir02
+spec:
+  spec:
+    devices:
+      requests:
+      - name: npu
+        deviceClassName: npu.example.com
+        # 使用CEL表达式筛选满足算力要求的NPU
+        selector:
+          - cel:
+              expression: "device.attributes[\"aicore\"] == 8 && device.attributes[\"memory\"] == 12"
+      config:
+      - name: npu
+        driver: example.com/npu
+        parameters:
+          "apiVersion": "gpu.resource.example.com/v1alpha1"
+          "kind": "GpuConfig"
+          "vnpuSpec":
+            "templateName": "vir02"
+
+---
+# 使用整卡的Pod
+apiVersion: v1
+kind: Pod
+metadata:
+  namespace: npu-vnpu-test5
+  name: npu-pod-whole
+  labels:
+    app: npu-pod-whole
+spec:
+  containers:
+  - name: npu-container
+    image: ubuntu:22.04
+    command: ["bash", "-c"]
+    args: ["echo 'ASCEND环境变量:'; env | grep ASCEND; echo 'NPU环境变量:'; env | grep NPU; trap 'exit 0' TERM; sleep 9999 & wait"]
+    resources:
+      claims:
+      - name: npu
+  resourceClaims:
+  - name: npu
+    resourceClaimTemplateName: npu-whole-card
+
+---
+# 使用vNPU分片的Pod
+apiVersion: v1
+kind: Pod
+metadata:
+  namespace: npu-vnpu-test5
+  name: vnpu-pod-slice
+  labels:
+    app: vnpu-pod-slice
+spec:
+  containers:
+  - name: vnpu-container
+    image: ubuntu:22.04
+    command: ["bash", "-c"]
+    args: ["echo 'ASCEND环境变量:'; env | grep ASCEND; echo 'NPU环境变量:'; env | grep NPU; trap 'exit 0' TERM; sleep 9999 & wait"]
+    resources:
+      claims:
+      - name: npu
+  resourceClaims:
+  - name: npu
+    resourceClaimTemplateName: vnpu-slice-vir02 

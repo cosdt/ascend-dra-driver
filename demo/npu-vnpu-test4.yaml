@@ -1,0 +1,91 @@
+# 单个Pod中多个容器使用不同的vNPU分片
+# 演示如何在单个Pod的不同容器中使用vNPU资源
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: npu-vnpu-test4
+
+---
+# vir01模板的ResourceClaimTemplate
+apiVersion: resource.k8s.io/v1beta1
+kind: ResourceClaimTemplate
+metadata:
+  namespace: npu-vnpu-test4
+  name: vnpu-slice-vir01
+spec:
+  spec:
+    devices:
+      requests:
+      - name: npu
+        deviceClassName: npu.example.com
+        # 使用CEL表达式筛选满足算力要求的NPU
+        selector:
+          - cel:
+              expression: "device.attributes[\"aicore\"] == 4 && device.attributes[\"memory\"] == 8"
+      config:
+      - name: npu
+        driver: example.com/npu
+        parameters:
+          "apiVersion": "gpu.resource.example.com/v1alpha1"
+          "kind": "GpuConfig"
+          "vnpuSpec":
+            "templateName": "vir01"
+
+---
+# vir02模板的ResourceClaimTemplate
+apiVersion: resource.k8s.io/v1beta1
+kind: ResourceClaimTemplate
+metadata:
+  namespace: npu-vnpu-test4
+  name: vnpu-slice-vir02
+spec:
+  spec:
+    devices:
+      requests:
+      - name: npu
+        deviceClassName: npu.example.com
+        # 使用CEL表达式筛选满足算力要求的NPU
+        selector:
+          - cel:
+              expression: "device.attributes[\"aicore\"] == 8 && device.attributes[\"memory\"] == 12"
+      config:
+      - name: npu
+        driver: example.com/npu
+        parameters:
+          "apiVersion": "gpu.resource.example.com/v1alpha1"
+          "kind": "GpuConfig"
+          "vnpuSpec":
+            "templateName": "vir02"
+
+---
+# 一个Pod中多个容器，每个容器使用一个不同的vNPU分片
+apiVersion: v1
+kind: Pod
+metadata:
+  namespace: npu-vnpu-test4
+  name: vnpu-pod-multi-container
+  labels:
+    app: vnpu-pod-multi-container
+spec:
+  containers:
+  - name: vnpu-container-vir01
+    image: ubuntu:22.04
+    command: ["bash", "-c"]
+    args: ["echo '容器1 ASCEND环境变量:'; env | grep ASCEND; echo 'NPU环境变量:'; env | grep NPU; trap 'exit 0' TERM; sleep 9999 & wait"]
+    resources:
+      claims:
+      - name: npu-vir01
+  - name: vnpu-container-vir02
+    image: ubuntu:22.04
+    command: ["bash", "-c"]
+    args: ["echo '容器2 ASCEND环境变量:'; env | grep ASCEND; echo 'NPU环境变量:'; env | grep NPU; trap 'exit 0' TERM; sleep 9999 & wait"]
+    resources:
+      claims:
+      - name: npu-vir02
+  resourceClaims:
+  - name: npu-vir01
+    resourceClaimTemplateName: vnpu-slice-vir01
+  - name: npu-vir02
+    resourceClaimTemplateName: vnpu-slice-vir02 

@@ -17,18 +17,26 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"slices"
 	"sync"
 
 	resourceapi "k8s.io/api/resource/v1beta1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	drapbv1 "k8s.io/kubelet/pkg/apis/dra/v1beta1"
 	"k8s.io/kubernetes/pkg/kubelet/checkpointmanager"
 
 	configapi "Ascend-dra-driver/api/example.com/resource/gpu/v1alpha1"
 
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	cdiapi "tags.cncf.io/container-device-interface/pkg/cdi"
 	cdispec "tags.cncf.io/container-device-interface/specs-go"
 )
@@ -43,17 +51,10 @@ type OpaqueDeviceConfig struct {
 	Config   runtime.Object
 }
 
-// VnpuTemplateAttribute 存储vNPU模板的各项资源属性
+// VnpuTemplateAttribute 存储vNPU模板的资源属性
 type VnpuTemplateAttribute struct {
 	AICORE int
 	Memory int // 单位GB
-	AICPU  int
-	VPC    int
-	PNGD   int
-	VENC   int
-	VDEC   int
-	JPEGD  int
-	JPEGE  int
 }
 
 // VnpuTemplate 表示一个vNPU模板
@@ -148,6 +149,15 @@ func NewDeviceState(config *Config) (*DeviceState, error) {
 
 	for _, c := range checkpoints {
 		if c == DriverPluginCheckpointFile {
+			// 创建预定义的ResourceClaimTemplate
+			if vnpuManager != nil {
+				go func() {
+					// 异步创建，避免阻塞驱动启动
+					if err := CreatePredefinedResourceClaimTemplates(vnpuManager); err != nil {
+						log.Printf("创建预定义ResourceClaimTemplate失败: %v", err)
+					}
+				}()
+			}
 			return state, nil
 		}
 	}
@@ -155,6 +165,16 @@ func NewDeviceState(config *Config) (*DeviceState, error) {
 	checkpoint := newCheckpoint()
 	if err := state.checkpointManager.CreateCheckpoint(DriverPluginCheckpointFile, checkpoint); err != nil {
 		return nil, fmt.Errorf("unable to sync to checkpoint: %v", err)
+	}
+
+	// 创建预定义的ResourceClaimTemplate
+	if vnpuManager != nil {
+		go func() {
+			// 异步创建，避免阻塞驱动启动
+			if err := CreatePredefinedResourceClaimTemplates(vnpuManager); err != nil {
+				log.Printf("创建预定义ResourceClaimTemplate失败: %v", err)
+			}
+		}()
 	}
 
 	return state, nil
@@ -239,51 +259,59 @@ func (s *DeviceState) prepareDevices(claim *resourceapi.ResourceClaim) (Prepared
 		return nil, fmt.Errorf("error getting opaque device configs: %v", err)
 	}
 
-	// 检查是否需要vNPU分片
-	var requestedTemplate string
-	for _, config := range configs {
-		switch castConfig := config.Config.(type) {
-		case *configapi.GpuConfig:
-			if castConfig.VnpuSpec != nil && castConfig.VnpuSpec.TemplateName != "" {
-				requestedTemplate = castConfig.VnpuSpec.TemplateName
-				log.Printf("发现vNPU规格需求: %s", requestedTemplate)
-			}
-		}
-	}
-
 	// Add the default NPU Config to the front of the config list with the
 	// lowest precedence.
 	configs = slices.Insert(configs, 0, &OpaqueDeviceConfig{
 		Requests: []string{},
-		Config:   configapi.DefaultGpuConfig(), // 这里可保持结构不变，内部逻辑可更新为 NPU 相关
+		Config:   configapi.DefaultGpuConfig(),
 	})
 
 	configResultsMap := make(map[runtime.Object][]*resourceapi.DeviceRequestAllocationResult)
 	for _, result := range claim.Status.Allocation.Devices.Results {
 		origDevice := result.Device
 
-		// 检查是否请求了vNPU分片
-		if requestedTemplate != "" && s.vnpuManager != nil {
-			// 分配vNPU分片
-			log.Printf("为设备 %s 尝试分配vNPU分片，模板: %s", origDevice, requestedTemplate)
-			slice, err := s.vnpuManager.AllocateSlice(origDevice, requestedTemplate)
+		// 尝试分配vNPU分片或整卡
+		if s.vnpuManager != nil {
+			// 从配置中获取算力需求
+			var requestedAicore, requestedMemory int
+			var templateName string
+			
+			for _, config := range configs {
+				if gpuConfig, ok := config.Config.(*configapi.GpuConfig); ok {
+					if gpuConfig.VnpuSpec != nil {
+						// 从VnpuSpec中获取模板名称
+						templateName = gpuConfig.VnpuSpec.TemplateName
+						if templateName != "" {
+							// 根据模板名称查找对应的资源配置
+							if template, ok := s.vnpuManager.Templates[templateName]; ok {
+								requestedAicore = template.Attributes.AICORE
+								requestedMemory = template.Attributes.Memory
+								log.Printf("从模板 %s 获取资源需求: AICORE=%d, Memory=%dGB", 
+									templateName, requestedAicore, requestedMemory)
+							} else {
+								log.Printf("警告: 未找到模板 %s 的配置，使用默认值", templateName)
+								requestedAicore = 4 // 默认值
+								requestedMemory = 8 // 默认值
+							}
+						} else {
+							log.Printf("警告: VnpuSpec中未指定templateName，使用默认值")
+							requestedAicore = 4 // 默认值
+							requestedMemory = 8 // 默认值
+						}
+						break
+					}
+				}
+			}
+
+			// 根据算力需求选择合适的切分方案
+			slice, err := s.vnpuManager.AllocateSlice(origDevice, requestedAicore, requestedMemory)
 			if err != nil {
 				log.Printf("警告: 分配vNPU分片失败: %v，将使用整卡分配", err)
 			} else {
 				// 替换设备ID为分片ID
 				result.Device = slice.SliceID
-				log.Printf("成功为设备 %s 分配vNPU分片: %s, 模板: %s",
-					origDevice, slice.SliceID, requestedTemplate)
-			}
-		} else {
-			// 整卡分配
-			if s.vnpuManager != nil {
-				_, err := s.vnpuManager.AllocateSlice(origDevice, "")
-				if err != nil {
-					log.Printf("警告: 分配整卡失败: %v", err)
-				} else {
-					log.Printf("成功为设备 %s 分配整卡", origDevice)
-				}
+				log.Printf("成功为设备 %s 分配vNPU分片: %s (模板: %s, AICORE: %d, Memory: %dGB)",
+					origDevice, slice.SliceID, templateName, requestedAicore, requestedMemory)
 			}
 		}
 
@@ -481,4 +509,209 @@ func GetOpaqueDeviceConfigs(
 	}
 
 	return resultConfigs, nil
+}
+
+// AllocateSlice 根据算力需求分配vNPU分片
+func (m *VnpuManager) AllocateSlice(deviceName string, requestedAicore, requestedMemory int) (*VnpuSlice, error) {
+	m.Lock()
+	defer m.Unlock()
+
+	log.Printf("尝试分配vNPU切片，设备: %s, 需求: AICORE=%d, Memory=%dGB", deviceName, requestedAicore, requestedMemory)
+
+	physicalNpu, ok := m.PhysicalNpus[deviceName]
+	if !ok {
+		return nil, fmt.Errorf("找不到物理NPU设备: %s", deviceName)
+	}
+
+	// 如果需求为0，尝试整卡分配
+	if requestedAicore == 0 && requestedMemory == 0 {
+		for i, slice := range physicalNpu.AvailableSlices {
+			if slice.SliceID == deviceName && !slice.Allocated {
+				slice.Allocated = true
+				physicalNpu.AllocatedSlices = append(physicalNpu.AllocatedSlices, slice)
+				physicalNpu.AvailableSlices = append(physicalNpu.AvailableSlices[:i], physicalNpu.AvailableSlices[i+1:]...)
+				log.Printf("成功分配物理NPU %s 的整卡", deviceName)
+				return slice, nil
+			}
+		}
+		return nil, fmt.Errorf("物理NPU %s 的整卡已被分配", deviceName)
+	}
+
+	// 根据算力需求选择合适的切分方案
+	var bestSlice *VnpuSlice
+	var bestDiff int = math.MaxInt32
+
+	for _, template := range physicalNpu.SupportTemplates {
+		// 检查模板是否满足需求
+		if template.Attributes.AICORE >= requestedAicore &&
+			template.Attributes.Memory >= requestedMemory {
+			// 计算与需求的差异
+			diff := (template.Attributes.AICORE - requestedAicore) +
+				(template.Attributes.Memory - requestedMemory)
+
+			// 选择差异最小的方案
+			if diff < bestDiff {
+				bestDiff = diff
+				// 创建新的分片
+				bestSlice = &VnpuSlice{
+					SliceID:      fmt.Sprintf("%s-%d", deviceName, len(physicalNpu.AllocatedSlices)+1),
+					TemplateName: template.Name,
+					Allocated:    true,
+				}
+			}
+		}
+	}
+
+	if bestSlice == nil {
+		return nil, fmt.Errorf("找不到满足需求的切分方案: AICORE>=%d, Memory>=%dGB",
+			requestedAicore, requestedMemory)
+	}
+
+	// 分配选中的分片
+	physicalNpu.AllocatedSlices = append(physicalNpu.AllocatedSlices, bestSlice)
+	log.Printf("成功分配vNPU分片: %s (AICORE: %d, Memory: %dGB)",
+		bestSlice.SliceID, requestedAicore, requestedMemory)
+
+	return bestSlice, nil
+}
+
+// 在DeviceState的初始化或者vnpuManager初始化后调用
+func CreatePredefinedResourceClaimTemplates(vnpuManager *VnpuManager) error {
+	log.Printf("开始创建预定义的ResourceClaimTemplate...")
+
+	// 创建K8s客户端
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		return fmt.Errorf("获取集群内配置失败: %v", err)
+	}
+
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return fmt.Errorf("创建Kubernetes客户端失败: %v", err)
+	}
+
+	// 创建专用的命名空间
+	nsName := "npu-vnpu-system"
+	_, err = clientset.CoreV1().Namespaces().Create(
+		context.TODO(),
+		&corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: nsName,
+			},
+		},
+		metav1.CreateOptions{},
+	)
+	if err != nil && !errors.IsAlreadyExists(err) {
+		log.Printf("创建命名空间失败: %v", err)
+	}
+
+	// 收集所有可用的模板
+	var allTemplates []VnpuTemplate
+	for _, physicalNpu := range vnpuManager.PhysicalNpus {
+		for _, template := range physicalNpu.SupportTemplates {
+			// 检查是否已存在相同的模板
+			exists := false
+			for _, t := range allTemplates {
+				if t.Name == template.Name {
+					exists = true
+					break
+				}
+			}
+			if !exists {
+				allTemplates = append(allTemplates, *template)
+			}
+		}
+	}
+
+	// 为每个模板创建两个ResourceClaimTemplate
+	for _, template := range allTemplates {
+		// 基于内存创建ResourceClaimTemplate
+		memName := fmt.Sprintf("npu-mem%d", template.Attributes.Memory)
+		err = createResourceClaimTemplate(clientset, nsName, memName,
+			fmt.Sprintf("device.attributes[\"memory\"] == %d", template.Attributes.Memory),
+			template.Name)
+		if err != nil && !errors.IsAlreadyExists(err) {
+			log.Printf("创建ResourceClaimTemplate %s 失败: %v", memName, err)
+		} else {
+			log.Printf("成功创建ResourceClaimTemplate: %s", memName)
+		}
+
+		// 基于AICORE创建ResourceClaimTemplate
+		aicoreName := fmt.Sprintf("npu-aicore%d", template.Attributes.AICORE)
+		err = createResourceClaimTemplate(clientset, nsName, aicoreName,
+			fmt.Sprintf("device.attributes[\"aicore\"] == %d", template.Attributes.AICORE),
+			template.Name)
+		if err != nil && !errors.IsAlreadyExists(err) {
+			log.Printf("创建ResourceClaimTemplate %s 失败: %v", aicoreName, err)
+		} else {
+			log.Printf("成功创建ResourceClaimTemplate: %s", aicoreName)
+		}
+	}
+
+	log.Printf("预定义ResourceClaimTemplate创建完成")
+	return nil
+}
+
+// 创建单个ResourceClaimTemplate
+func createResourceClaimTemplate(clientset *kubernetes.Clientset, namespace, name, celExpression, templateName string) error {
+	paramObj := map[string]interface{}{
+		"apiVersion": "gpu.resource.example.com/v1alpha1",
+		"kind":       "GpuConfig",
+		"vnpuSpec": map[string]interface{}{
+			"templateName": templateName,
+		},
+	}
+
+	// 序列化为 JSON
+	raw, err := json.Marshal(paramObj)
+	if err != nil {
+		panic(err)
+	}
+
+	// 构建ResourceClaimTemplate对象
+	rct := &resourceapi.ResourceClaimTemplate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: resourceapi.ResourceClaimTemplateSpec{
+			Spec: resourceapi.ResourceClaimSpec{
+				Devices: resourceapi.DeviceClaim{
+					Requests: []resourceapi.DeviceRequest{
+						{
+							Name:            "npu",
+							DeviceClassName: "npu.example.com",
+							Selectors: []resourceapi.DeviceSelector{
+								{
+									CEL: &resourceapi.CELDeviceSelector{
+										Expression: celExpression,
+									},
+								},
+							},
+						},
+					},
+					Config: []resourceapi.DeviceClaimConfiguration{
+						{
+							DeviceConfiguration: resourceapi.DeviceConfiguration{
+								Opaque: &resourceapi.OpaqueDeviceConfiguration{
+									Driver: "example.com/npu",
+									Parameters: runtime.RawExtension{
+										Raw: raw,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// 创建ResourceClaimTemplate
+	_, err = clientset.ResourceV1beta1().ResourceClaimTemplates(namespace).Create(
+		context.TODO(),
+		rct,
+		metav1.CreateOptions{},
+	)
+	return err
 }

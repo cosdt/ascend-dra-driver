@@ -200,65 +200,6 @@ func (m *VnpuManager) InitPhysicalNpu(deviceName string, logicID int32) {
 	log.Printf("物理NPU %s 初始化完成", deviceName)
 }
 
-// 分配vNPU切片
-func (m *VnpuManager) AllocateSlice(deviceName string, templateName string) (*VnpuSlice, error) {
-	m.Lock()
-	defer m.Unlock()
-
-	log.Printf("尝试分配vNPU切片，设备: %s, 模板: %s", deviceName, templateName)
-
-	physicalNpu, ok := m.PhysicalNpus[deviceName]
-	if !ok {
-		return nil, fmt.Errorf("找不到物理NPU设备: %s", deviceName)
-	}
-
-	// 整卡分配
-	if templateName == "" {
-		for i, slice := range physicalNpu.AvailableSlices {
-			if slice.SliceID == deviceName && !slice.Allocated {
-				slice.Allocated = true
-				physicalNpu.AllocatedSlices = append(physicalNpu.AllocatedSlices, slice)
-				physicalNpu.AvailableSlices = append(physicalNpu.AvailableSlices[:i], physicalNpu.AvailableSlices[i+1:]...)
-				log.Printf("成功分配物理NPU %s 的整卡", deviceName)
-				return slice, nil
-			}
-		}
-		return nil, fmt.Errorf("物理NPU %s 的整卡已被分配", deviceName)
-	}
-
-	// vNPU分片分配
-	// 检查模板是否存在
-	if _, ok := m.Templates[templateName]; !ok {
-		return nil, fmt.Errorf("不支持的vNPU模板: %s", templateName)
-	}
-
-	// 如果整卡已被分配，不能再分配vNPU
-	for _, slice := range physicalNpu.AllocatedSlices {
-		if slice.SliceID == deviceName {
-			return nil, fmt.Errorf("物理NPU %s 的整卡已被分配，无法分配vNPU", deviceName)
-		}
-	}
-
-	// 生成新的分片ID
-	sliceCount := len(physicalNpu.AllocatedSlices) + 1
-	sliceID := fmt.Sprintf("%s-%d", deviceName, sliceCount)
-
-	// 创建新的分片
-	slice := &VnpuSlice{
-		SliceID:      sliceID,
-		TemplateName: templateName,
-		Allocated:    true,
-	}
-
-	physicalNpu.AllocatedSlices = append(physicalNpu.AllocatedSlices, slice)
-
-	// 更新当前NPU支持的模板
-	m.updateSupportTemplates(physicalNpu)
-
-	log.Printf("成功分配物理NPU %s 的vNPU切片 %s，使用模板 %s", deviceName, sliceID, templateName)
-	return slice, nil
-}
-
 // 释放vNPU切片
 func (m *VnpuManager) ReleaseSlice(sliceID string) error {
 	m.Lock()

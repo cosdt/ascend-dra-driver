@@ -1,0 +1,54 @@
+# 使用CEL表达式筛选支持特定vNPU模板的NPU
+# 演示如何使用CEL表达式选择特定支持vir04模板的NPU设备
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: npu-vnpu-test3
+
+---
+apiVersion: resource.k8s.io/v1beta1
+kind: ResourceClaimTemplate
+metadata:
+  namespace: npu-vnpu-test3
+  name: vnpu-slice-vir04
+spec:
+  spec:
+    devices:
+      requests:
+      - name: npu
+        deviceClassName: npu.example.com
+        # 使用CEL表达式筛选满足算力要求的NPU
+        selector:
+          - cel:
+              expression: "device.attributes[\"aicore\"] == 16 && device.attributes[\"memory\"] == 16"
+      config:
+      - name: npu
+        driver: example.com/npu
+        parameters:
+          "apiVersion": "gpu.resource.example.com/v1alpha1"
+          "kind": "GpuConfig"
+          "vnpuSpec":
+            "templateName": "vir04"
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  namespace: npu-vnpu-test3
+  name: vnpu-pod-vir04
+  labels:
+    app: vnpu-pod-large
+spec:
+  containers:
+  - name: vnpu-container
+    image: ubuntu:22.04
+    command: ["bash", "-c"]
+    args: ["echo 'ASCEND环境变量:'; env | grep ASCEND; echo 'NPU环境变量:'; env | grep NPU; trap 'exit 0' TERM; sleep 9999 & wait"]
+    resources:
+      claims:
+      - name: npu
+  resourceClaims:
+  - name: npu
+    resourceClaimTemplateName: vnpu-slice-vir04 
