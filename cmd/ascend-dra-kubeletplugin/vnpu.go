@@ -141,7 +141,7 @@ func parseTemplateInfo(output string, templates map[string]*VnpuTemplate) error 
 		fields := regexp.MustCompile(`\s+`).Split(line, -1)
 
 		// 第一列如果有内容，说明是一个新的模板行
-		if len(fields) > 0 && fields[0] != "" {
+		if len(fields) > 0 && strings.HasPrefix(fields[0], "vir") {
 			currentTemplate = fields[0]
 			currentAttrs = &VnpuTemplateAttribute{}
 
