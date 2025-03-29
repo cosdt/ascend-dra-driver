@@ -108,7 +108,7 @@ type DeviceState struct {
 }
 
 func NewDeviceState(config *Config) (*DeviceState, error) {
-	allocatable, err := enumerateAllPossibleDevices()
+	allocatable, vnpuManager, err := enumerateAllPossibleDevices()
 	if err != nil {
 		return nil, fmt.Errorf("error enumerating all possible devices: %v", err)
 	}
@@ -126,13 +126,6 @@ func NewDeviceState(config *Config) (*DeviceState, error) {
 	checkpointManager, err := checkpointmanager.NewCheckpointManager(DriverPluginPath)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create checkpoint manager: %v", err)
-	}
-
-	// 初始化vNPU管理器
-	vnpuManager, err := NewVnpuManager()
-	if err != nil {
-		log.Printf("警告: 初始化vNPU管理器失败: %v, 将只支持整卡分配", err)
-		// 即使失败，也继续，只是不支持vNPU分配
 	}
 
 	state := &DeviceState{
@@ -275,7 +268,7 @@ func (s *DeviceState) prepareDevices(claim *resourceapi.ResourceClaim) (Prepared
 			// 从配置中获取算力需求
 			var requestedAicore, requestedMemory int
 			var templateName string
-			
+
 			for _, config := range configs {
 				if gpuConfig, ok := config.Config.(*configapi.GpuConfig); ok {
 					if gpuConfig.VnpuSpec != nil {
@@ -286,7 +279,7 @@ func (s *DeviceState) prepareDevices(claim *resourceapi.ResourceClaim) (Prepared
 							if template, ok := s.vnpuManager.Templates[templateName]; ok {
 								requestedAicore = template.Attributes.AICORE
 								requestedMemory = template.Attributes.Memory
-								log.Printf("从模板 %s 获取资源需求: AICORE=%d, Memory=%dGB", 
+								log.Printf("从模板 %s 获取资源需求: AICORE=%d, Memory=%dGB",
 									templateName, requestedAicore, requestedMemory)
 							} else {
 								log.Printf("警告: 未找到模板 %s 的配置，使用默认值", templateName)

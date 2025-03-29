@@ -32,10 +32,10 @@ import (
 	"github.com/google/uuid"
 )
 
-func enumerateAllPossibleDevices() (AllocatableDevices, error) {
+func enumerateAllPossibleDevices() (AllocatableDevices, *VnpuManager, error) {
 	devM, err := devmanager.AutoInit("")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	hdm := server.NewHwDevManager(devM)
 	allInfo := hdm.AllInfo
@@ -106,7 +106,7 @@ func enumerateAllPossibleDevices() (AllocatableDevices, error) {
 
 		log.Printf("发现NPU设备: %s, 型号: %s", deviceName, dev.DevType)
 	}
-	return alldevices, nil
+	return alldevices, vnpuManager, nil
 }
 
 func contains(slice []string, item string) bool {
