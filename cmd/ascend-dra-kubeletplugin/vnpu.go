@@ -103,6 +103,7 @@ func parseTemplateInfo(output string, templates map[string]*VnpuTemplate) error 
 		return fmt.Errorf("未找到模板信息表头")
 	}
 
+	headerLine = strings.Trim(headerLine, "|")
 	// 解析表头，确定各列位置
 	headerFields := regexp.MustCompile(`\s+`).Split(strings.TrimSpace(headerLine), -1)
 	columnPositions := make(map[string]int)
