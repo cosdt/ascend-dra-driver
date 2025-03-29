@@ -621,7 +621,7 @@ func CreatePredefinedResourceClaimTemplates(vnpuManager *VnpuManager) error {
 		// 基于内存创建ResourceClaimTemplate
 		memName := fmt.Sprintf("npu-mem%d", template.Attributes.Memory)
 		err = createResourceClaimTemplate(clientset, nsName, memName,
-			fmt.Sprintf("int(device.attributes[\"memory\"]) == %d", template.Attributes.Memory),
+			fmt.Sprintf("device.attributes[\"memory\"].int == %d", template.Attributes.Memory),
 			template.Name)
 		if err != nil && !errors.IsAlreadyExists(err) {
 			log.Printf("创建ResourceClaimTemplate %s 失败: %v", memName, err)
@@ -632,7 +632,7 @@ func CreatePredefinedResourceClaimTemplates(vnpuManager *VnpuManager) error {
 		// 基于AICORE创建ResourceClaimTemplate
 		aicoreName := fmt.Sprintf("npu-aicore%d", template.Attributes.AICORE)
 		err = createResourceClaimTemplate(clientset, nsName, aicoreName,
-			fmt.Sprintf("int(device.attributes[\"aicore\"]) == %d", template.Attributes.AICORE),
+			fmt.Sprintf("device.attributes[\"aicore\"].int == %d", template.Attributes.AICORE),
 			template.Name)
 		if err != nil && !errors.IsAlreadyExists(err) {
 			log.Printf("创建ResourceClaimTemplate %s 失败: %v", aicoreName, err)
@@ -687,7 +687,7 @@ func createResourceClaimTemplate(clientset *kubernetes.Clientset, namespace, nam
 						{
 							DeviceConfiguration: resourceapi.DeviceConfiguration{
 								Opaque: &resourceapi.OpaqueDeviceConfiguration{
-									Driver: "example.com/npu",
+									Driver: DriverName,
 									Parameters: runtime.RawExtension{
 										Raw: raw,
 									},
