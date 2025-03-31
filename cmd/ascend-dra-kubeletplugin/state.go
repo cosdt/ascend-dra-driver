@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -400,11 +401,10 @@ func (s *DeviceState) applyConfig(config *configapi.GpuConfig, results []*resour
 
 			// 检查是否为分片的命名模式 npu-x-y
 			isSlice := false
-			var prefix string
-			var num1, num2 int
+			pattern := `^npu-(\d+)-(\d+)$`
+			r := regexp.MustCompile(pattern)
 
-			sliceMatched, err := fmt.Sscanf(deviceID, "%s-%d-%d", &prefix, &num1, &num2)
-			if err == nil && sliceMatched == 3 && prefix == "npu" {
+			if r.MatchString(deviceID) {
 				isSlice = true
 			}
 
