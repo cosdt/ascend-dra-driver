@@ -59,6 +59,7 @@ type DevManager interface {
 	CreateVirtualDevice(int32, string) (string, error)
 	DestroyVirtualDevice(string) error
 	GetChipAiCoreCount() (int32, error)
+	GetChipMem() (int32, error)
 }
 
 // SetDmgr set devmanager
