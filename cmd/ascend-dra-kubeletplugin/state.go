@@ -272,25 +272,15 @@ func (s *DeviceState) prepareDevices(claim *resourceapi.ResourceClaim) (Prepared
 
 			for _, config := range configs {
 				if gpuConfig, ok := config.Config.(*configapi.GpuConfig); ok {
-					if gpuConfig.VnpuSpec != nil {
+					if gpuConfig.VnpuSpec != nil && templateName != "" {
 						// 从VnpuSpec中获取模板名称
 						templateName = gpuConfig.VnpuSpec.TemplateName
-						if templateName != "" {
-							// 根据模板名称查找对应的资源配置
-							if template, ok := s.vnpuManager.Templates[templateName]; ok {
-								requestedAicore = template.Attributes.AICORE
-								requestedMemory = template.Attributes.Memory
-								log.Printf("从模板 %s 获取资源需求: AICORE=%d, Memory=%dGB",
-									templateName, requestedAicore, requestedMemory)
-							} else {
-								log.Printf("警告: 未找到模板 %s 的配置，使用默认值", templateName)
-								requestedAicore = 4 // 默认值
-								requestedMemory = 8 // 默认值
-							}
-						} else {
-							log.Printf("警告: VnpuSpec中未指定templateName，使用默认值")
-							requestedAicore = 4 // 默认值
-							requestedMemory = 8 // 默认值
+						// 根据模板名称查找对应的资源配置
+						if template, ok := s.vnpuManager.Templates[templateName]; ok {
+							requestedAicore = template.Attributes.AICORE
+							requestedMemory = template.Attributes.Memory
+							log.Printf("从模板 %s 获取资源需求: AICORE=%d, Memory=%dGB",
+								templateName, requestedAicore, requestedMemory)
 						}
 						break
 					}
