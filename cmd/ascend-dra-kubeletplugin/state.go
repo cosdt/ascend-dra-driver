@@ -23,6 +23,7 @@ import (
 	"log"
 	"math"
 	"slices"
+	"strings"
 	"sync"
 
 	resourceapi "k8s.io/api/resource/v1beta1"
@@ -74,6 +75,7 @@ type VnpuSlice struct {
 type PhysicalNpuState struct {
 	DeviceName       string                   // 设备名称，例如: npu-0
 	LogicID          int32                    // 逻辑ID
+	ModelName        string                   // 设备型号，例如: Ascend910、Ascend310P等
 	AvailableSlices  []*VnpuSlice             // 可用的vNPU分片
 	AllocatedSlices  []*VnpuSlice             // 已分配的vNPU分片
 	SupportTemplates map[string]*VnpuTemplate // 支持的所有模板
@@ -596,9 +598,22 @@ func CreatePredefinedResourceClaimTemplates(vnpuManager *VnpuManager) error {
 		log.Printf("创建命名空间失败: %v", err)
 	}
 
-	// 收集所有可用的模板
+	// 收集所有可用的模板和设备型号信息
 	var allTemplates []VnpuTemplate
-	for _, physicalNpu := range vnpuManager.PhysicalNpus {
+	deviceModels := make(map[string]string)
+
+	// 首先收集所有设备的型号信息和模板
+	for deviceName, physicalNpu := range vnpuManager.PhysicalNpus {
+		// 获取设备型号信息
+		// 注意：设备的型号信息应该在DeviceState初始化时已经保存在物理NPU中
+		// 这里我们需要修改PhysicalNpuState结构来存储设备型号
+		modelName := physicalNpu.ModelName
+		if modelName == "" {
+			modelName = "unknown" // 如果没有型号信息，使用默认值
+		}
+		deviceModels[deviceName] = modelName
+
+		// 收集vNPU模板
 		for _, template := range physicalNpu.SupportTemplates {
 			// 检查是否已存在相同的模板
 			exists := false
@@ -614,28 +629,56 @@ func CreatePredefinedResourceClaimTemplates(vnpuManager *VnpuManager) error {
 		}
 	}
 
-	// 为每个模板创建两个ResourceClaimTemplate
-	for _, template := range allTemplates {
-		// 基于内存创建ResourceClaimTemplate
-		memName := fmt.Sprintf("npu-mem%d", template.Attributes.Memory)
-		err = createResourceClaimTemplate(clientset, nsName, memName,
-			fmt.Sprintf("device.attributes[\"memory\"].int == %d", template.Attributes.Memory),
-			template.Name)
-		if err != nil && !errors.IsAlreadyExists(err) {
-			log.Printf("创建ResourceClaimTemplate %s 失败: %v", memName, err)
-		} else {
-			log.Printf("成功创建ResourceClaimTemplate: %s", memName)
-		}
+	// 为每个物理NPU创建整卡模板
+	for deviceName, model := range deviceModels {
+		// 去掉型号中可能存在的空格和特殊字符，确保名称合法
+		safeModel := strings.ReplaceAll(model, " ", "-")
+		safeModel = strings.ReplaceAll(safeModel, "/", "-")
 
-		// 基于AICORE创建ResourceClaimTemplate
-		aicoreName := fmt.Sprintf("npu-aicore%d", template.Attributes.AICORE)
-		err = createResourceClaimTemplate(clientset, nsName, aicoreName,
-			fmt.Sprintf("device.attributes[\"aicore\"].int == %d", template.Attributes.AICORE),
-			template.Name)
+		// 创建整卡模板的ResourceClaimTemplate
+		fullCardName := fmt.Sprintf("npu-%s", safeModel)
+		err = createResourceClaimTemplate(clientset, nsName, fullCardName,
+			fmt.Sprintf("device.name == \"%s\" && device.attributes[\"model\"].string == \"%s\"", deviceName, model),
+			"") // 整卡没有特定模板名称
 		if err != nil && !errors.IsAlreadyExists(err) {
-			log.Printf("创建ResourceClaimTemplate %s 失败: %v", aicoreName, err)
+			log.Printf("创建整卡ResourceClaimTemplate %s 失败: %v", fullCardName, err)
 		} else {
-			log.Printf("成功创建ResourceClaimTemplate: %s", aicoreName)
+			log.Printf("成功创建整卡ResourceClaimTemplate: %s", fullCardName)
+		}
+	}
+
+	// 为每个vNPU模板创建ResourceClaimTemplate
+	for _, template := range allTemplates {
+		// 遍历所有设备型号，为每个型号创建特定的模板
+		for _, model := range deviceModels {
+			// 去掉型号中可能存在的空格和特殊字符，确保名称合法
+			safeModel := strings.ReplaceAll(model, " ", "-")
+			safeModel = strings.ReplaceAll(safeModel, "/", "-")
+			safeModel = strings.ToLower(safeModel)
+
+			// 基于内存创建ResourceClaimTemplate
+			memName := fmt.Sprintf("npu-%s-mem%d", safeModel, template.Attributes.Memory)
+			err = createResourceClaimTemplate(clientset, nsName, memName,
+				fmt.Sprintf("device.attributes[\"memory\"].int == %d && device.attributes[\"model\"].string == \"%s\"",
+					template.Attributes.Memory, model),
+				template.Name)
+			if err != nil && !errors.IsAlreadyExists(err) {
+				log.Printf("创建ResourceClaimTemplate %s 失败: %v", memName, err)
+			} else {
+				log.Printf("成功创建ResourceClaimTemplate: %s", memName)
+			}
+
+			// 基于AICORE创建ResourceClaimTemplate
+			aicoreName := fmt.Sprintf("npu-%s-aicore%d", safeModel, template.Attributes.AICORE)
+			err = createResourceClaimTemplate(clientset, nsName, aicoreName,
+				fmt.Sprintf("device.attributes[\"aicore\"].int == %d && device.attributes[\"model\"].string == \"%s\"",
+					template.Attributes.AICORE, model),
+				template.Name)
+			if err != nil && !errors.IsAlreadyExists(err) {
+				log.Printf("创建ResourceClaimTemplate %s 失败: %v", aicoreName, err)
+			} else {
+				log.Printf("成功创建ResourceClaimTemplate: %s", aicoreName)
+			}
 		}
 	}
 

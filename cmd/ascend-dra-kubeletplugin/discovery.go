@@ -65,7 +65,7 @@ func enumerateAllPossibleDevices() (AllocatableDevices, *VnpuManager, error) {
 		// 添加vNPU模板信息作为设备属性
 		if vnpuManager != nil {
 			// 初始化物理NPU
-			vnpuManager.InitPhysicalNpu(deviceName, dev.LogicID)
+			vnpuManager.InitPhysicalNpu(deviceName, dev.LogicID, dev.DevType)
 
 			// 添加支持的vNPU模板属性
 			physicalNpu := vnpuManager.PhysicalNpus[deviceName]
@@ -141,7 +141,7 @@ func enumerateAllPossibleDevices() (AllocatableDevices, *VnpuManager, error) {
 		device := resourceapi.Device{
 			Name: deviceName,
 			Basic: &resourceapi.BasicDevice{
-				Attributes: devAttributes
+				Attributes: devAttributes,
 			},
 		}
 		alldevices[device.Name] = device

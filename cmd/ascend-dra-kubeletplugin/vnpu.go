@@ -201,16 +201,17 @@ func NewVnpuManager() (*VnpuManager, error) {
 }
 
 // 初始化物理NPU
-func (m *VnpuManager) InitPhysicalNpu(deviceName string, logicID int32) {
+func (m *VnpuManager) InitPhysicalNpu(deviceName string, logicID int32, modelName string) {
 	m.Lock()
 	defer m.Unlock()
 
-	log.Printf("初始化物理NPU: %s, LogicID: %d", deviceName, logicID)
+	log.Printf("初始化物理NPU: %s, LogicID: %d, 型号: %s", deviceName, logicID, modelName)
 
 	// 创建物理NPU状态对象
 	physicalNpu := &PhysicalNpuState{
 		DeviceName:       deviceName,
 		LogicID:          logicID,
+		ModelName:        modelName,
 		AvailableSlices:  []*VnpuSlice{},
 		AllocatedSlices:  []*VnpuSlice{},
 		SupportTemplates: make(map[string]*VnpuTemplate),
