@@ -75,13 +75,6 @@ func (c *GpuConfig) Validate() error {
 		return err
 	}
 
-	// 验证VnpuSpec
-	if c.VnpuSpec != nil {
-		if err := c.VnpuSpec.Validate(); err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 
