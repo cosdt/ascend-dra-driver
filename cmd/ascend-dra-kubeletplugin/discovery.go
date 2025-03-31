@@ -57,9 +57,9 @@ func enumerateAllPossibleDevices() (AllocatableDevices, *VnpuManager, error) {
 
 		// 构建基本设备属性
 		devAttributes := map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
-			"index": {IntValue: ptr.To(int64(dev.LogicID))},
-			"uuid":  {StringValue: ptr.To(uuidStr)},
-			"model": {StringValue: ptr.To(dev.DevType)},
+			DriverDomain + "index": {IntValue: ptr.To(int64(dev.LogicID))},
+			DriverDomain + "uuid":  {StringValue: ptr.To(uuidStr)},
+			DriverDomain + "model": {StringValue: ptr.To(dev.DevType)},
 		}
 
 		// 添加vNPU模板信息作为设备属性
@@ -129,10 +129,10 @@ func enumerateAllPossibleDevices() (AllocatableDevices, *VnpuManager, error) {
 				}
 
 				// 将最大算力属性作为设备属性
-				devAttributes["aicore"] = resourceapi.DeviceAttribute{
+				devAttributes[DriverDomain+"aicore"] = resourceapi.DeviceAttribute{
 					IntValue: ptr.To(int64(maxAicore)),
 				}
-				devAttributes["memory"] = resourceapi.DeviceAttribute{
+				devAttributes[DriverDomain+"memory"] = resourceapi.DeviceAttribute{
 					IntValue: ptr.To(int64(maxMemory)),
 				}
 			}
