@@ -604,6 +604,9 @@ func CreatePredefinedResourceClaimTemplates(vnpuManager *VnpuManager) error {
 	// 使用map记录所有唯一的模板，以属性(AICORE、Memory)作为键
 	uniqueTemplates := make(map[string]*VnpuTemplate)
 	
+	// 使用map记录已更新的模板，避免重复更新
+	updatedTemplates := make(map[string]bool)
+	
 	// 首先收集所有唯一的设备型号和模板
 	for _, physicalNpu := range vnpuManager.PhysicalNpus {
 		// 记录唯一的型号
@@ -629,7 +632,7 @@ func CreatePredefinedResourceClaimTemplates(vnpuManager *VnpuManager) error {
 			name,
 			metav1.GetOptions{},
 		)
-		return err == nil || errors.IsAlreadyExists(err)
+		return err == nil
 	}
 
 	// 为每个唯一型号创建整卡模板
@@ -642,21 +645,21 @@ func CreatePredefinedResourceClaimTemplates(vnpuManager *VnpuManager) error {
 		// 为该型号创建整卡模板
 		fullCardName := fmt.Sprintf("npu-%s", safeModel)
 		
-		// 检查模板是否已存在
-		if templateExists(fullCardName) {
-			log.Printf("整卡ResourceClaimTemplate %s 已存在，跳过创建", fullCardName)
+		// 如果已经更新过这个模板，跳过
+		if updatedTemplates[fullCardName] {
 			continue
 		}
-
+		
 		// 直接使用型号匹配
 		celExpression := fmt.Sprintf("device.attributes[\"model\"].string == \"%s\"", modelName)
 
 		err = createResourceClaimTemplate(clientset, nsName, fullCardName,
 			celExpression, "") // 整卡没有特定模板名称
-		if err != nil && !errors.IsAlreadyExists(err) {
-			log.Printf("创建整卡ResourceClaimTemplate %s 失败: %v", fullCardName, err)
+		if err != nil {
+			log.Printf("创建/更新整卡ResourceClaimTemplate %s 失败: %v", fullCardName, err)
 		} else {
-			log.Printf("成功创建整卡ResourceClaimTemplate: %s", fullCardName)
+			log.Printf("成功创建/更新整卡ResourceClaimTemplate: %s", fullCardName)
+			updatedTemplates[fullCardName] = true
 		}
 	}
 
@@ -671,41 +674,41 @@ func CreatePredefinedResourceClaimTemplates(vnpuManager *VnpuManager) error {
 			// 基于内存创建ResourceClaimTemplate
 			memName := fmt.Sprintf("npu-%s-mem%d", safeModel, template.Attributes.Memory)
 			
-			// 检查内存模板是否已存在
-			memExists := templateExists(memName)
-			if memExists {
-				log.Printf("ResourceClaimTemplate %s 已存在，跳过创建", memName)
+			// 如果已经更新过这个模板，跳过
+			if updatedTemplates[memName] {
+				continue
+			}
+			
+			memoryExpression := fmt.Sprintf("device.attributes[\"memory\"].int == %d && device.attributes[\"model\"].string == \"%s\"",
+				template.Attributes.Memory, modelName)
+
+			err = createResourceClaimTemplate(clientset, nsName, memName,
+				memoryExpression, template.Name)
+			if err != nil {
+				log.Printf("创建/更新ResourceClaimTemplate %s 失败: %v", memName, err)
 			} else {
-				memoryExpression := fmt.Sprintf("device.attributes[\"memory\"].int == %d && device.attributes[\"model\"].string == \"%s\"",
-					template.Attributes.Memory, modelName)
-	
-				err = createResourceClaimTemplate(clientset, nsName, memName,
-					memoryExpression, template.Name)
-				if err != nil && !errors.IsAlreadyExists(err) {
-					log.Printf("创建ResourceClaimTemplate %s 失败: %v", memName, err)
-				} else {
-					log.Printf("成功创建ResourceClaimTemplate: %s", memName)
-				}
+				log.Printf("成功创建/更新ResourceClaimTemplate: %s", memName)
+				updatedTemplates[memName] = true
 			}
 
 			// 基于AICORE创建ResourceClaimTemplate
 			aicoreName := fmt.Sprintf("npu-%s-aicore%d", safeModel, template.Attributes.AICORE)
 			
-			// 检查aicore模板是否已存在
-			aicoreExists := templateExists(aicoreName)
-			if aicoreExists {
-				log.Printf("ResourceClaimTemplate %s 已存在，跳过创建", aicoreName)
+			// 如果已经更新过这个模板，跳过
+			if updatedTemplates[aicoreName] {
+				continue
+			}
+			
+			aicoreExpression := fmt.Sprintf("device.attributes[\"aicore\"].int == %d && device.attributes[\"model\"].string == \"%s\"",
+				template.Attributes.AICORE, modelName)
+
+			err = createResourceClaimTemplate(clientset, nsName, aicoreName,
+				aicoreExpression, template.Name)
+			if err != nil {
+				log.Printf("创建/更新ResourceClaimTemplate %s 失败: %v", aicoreName, err)
 			} else {
-				aicoreExpression := fmt.Sprintf("device.attributes[\"aicore\"].int == %d && device.attributes[\"model\"].string == \"%s\"",
-					template.Attributes.AICORE, modelName)
-	
-				err = createResourceClaimTemplate(clientset, nsName, aicoreName,
-					aicoreExpression, template.Name)
-				if err != nil && !errors.IsAlreadyExists(err) {
-					log.Printf("创建ResourceClaimTemplate %s 失败: %v", aicoreName, err)
-				} else {
-					log.Printf("成功创建ResourceClaimTemplate: %s", aicoreName)
-				}
+				log.Printf("成功创建/更新ResourceClaimTemplate: %s", aicoreName)
+				updatedTemplates[aicoreName] = true
 			}
 		}
 	}
@@ -769,11 +772,29 @@ func createResourceClaimTemplate(clientset *kubernetes.Clientset, namespace, nam
 		},
 	}
 
-	// 创建ResourceClaimTemplate
-	_, err = clientset.ResourceV1beta1().ResourceClaimTemplates(namespace).Create(
+	// 尝试获取已存在的模板
+	existingRCT, err := clientset.ResourceV1beta1().ResourceClaimTemplates(namespace).Get(
 		context.TODO(),
-		rct,
-		metav1.CreateOptions{},
+		name,
+		metav1.GetOptions{},
 	)
+
+	if err == nil {
+		// 如果模板存在，更新它
+		existingRCT.Spec = rct.Spec
+		_, err = clientset.ResourceV1beta1().ResourceClaimTemplates(namespace).Update(
+			context.TODO(),
+			existingRCT,
+			metav1.UpdateOptions{},
+		)
+	} else if errors.IsNotFound(err) {
+		// 如果模板不存在，创建新的
+		_, err = clientset.ResourceV1beta1().ResourceClaimTemplates(namespace).Create(
+			context.TODO(),
+			rct,
+			metav1.CreateOptions{},
+		)
+	}
+
 	return err
 }
