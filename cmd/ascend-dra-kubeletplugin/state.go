@@ -600,18 +600,22 @@ func CreatePredefinedResourceClaimTemplates(vnpuManager *VnpuManager) error {
 
 	// 收集所有可用的模板和设备型号信息
 	var allTemplates []VnpuTemplate
-	deviceModels := make(map[string]string)
 
-	// 首先收集所有设备的型号信息和模板
+	// 使用map来记录所有唯一的型号以及对应的设备
+	uniqueModels := make(map[string][]string) // 型号 -> 设备名列表
+	deviceToModel := make(map[string]string)  // 设备名 -> 型号
+
+	// 首先收集所有设备的型号信息
 	for deviceName, physicalNpu := range vnpuManager.PhysicalNpus {
 		// 获取设备型号信息
-		// 注意：设备的型号信息应该在DeviceState初始化时已经保存在物理NPU中
-		// 这里我们需要修改PhysicalNpuState结构来存储设备型号
 		modelName := physicalNpu.ModelName
 		if modelName == "" {
 			modelName = "unknown" // 如果没有型号信息，使用默认值
 		}
-		deviceModels[deviceName] = modelName
+
+		// 记录设备型号关系
+		deviceToModel[deviceName] = modelName
+		uniqueModels[modelName] = append(uniqueModels[modelName], deviceName)
 
 		// 收集vNPU模板
 		for _, template := range physicalNpu.SupportTemplates {
@@ -629,17 +633,29 @@ func CreatePredefinedResourceClaimTemplates(vnpuManager *VnpuManager) error {
 		}
 	}
 
-	// 为每个物理NPU创建整卡模板
-	for deviceName, model := range deviceModels {
+	// 为每个唯一型号创建整卡模板
+	for modelName, deviceList := range uniqueModels {
 		// 去掉型号中可能存在的空格和特殊字符，确保名称合法
-		safeModel := strings.ReplaceAll(model, " ", "-")
+		safeModel := strings.ReplaceAll(modelName, " ", "-")
 		safeModel = strings.ReplaceAll(safeModel, "/", "-")
+		safeModel = strings.ToLower(safeModel)
 
-		// 创建整卡模板的ResourceClaimTemplate
+		// 为该型号的所有设备创建一个整卡模板
 		fullCardName := fmt.Sprintf("npu-%s", safeModel)
+
+		// 构建设备选择表达式，匹配该型号的任意设备
+		var deviceSelectors []string
+		for _, deviceName := range deviceList {
+			deviceSelectors = append(deviceSelectors,
+				fmt.Sprintf("(device.name == \"%s\" && device.attributes[\"model\"].string == \"%s\")",
+					deviceName, modelName))
+		}
+
+		// 使用OR连接多个设备条件
+		celExpression := strings.Join(deviceSelectors, " || ")
+
 		err = createResourceClaimTemplate(clientset, nsName, fullCardName,
-			fmt.Sprintf("device.name == \"%s\" && device.attributes[\"model\"].string == \"%s\"", deviceName, model),
-			"") // 整卡没有特定模板名称
+			celExpression, "") // 整卡没有特定模板名称
 		if err != nil && !errors.IsAlreadyExists(err) {
 			log.Printf("创建整卡ResourceClaimTemplate %s 失败: %v", fullCardName, err)
 		} else {
@@ -647,21 +663,37 @@ func CreatePredefinedResourceClaimTemplates(vnpuManager *VnpuManager) error {
 		}
 	}
 
-	// 为每个vNPU模板创建ResourceClaimTemplate
+	// 为每个vNPU模板创建ResourceClaimTemplate，按型号分组
 	for _, template := range allTemplates {
-		// 遍历所有设备型号，为每个型号创建特定的模板
-		for _, model := range deviceModels {
+		// 只为每个唯一型号创建一次模板
+		for modelName, deviceList := range uniqueModels {
 			// 去掉型号中可能存在的空格和特殊字符，确保名称合法
-			safeModel := strings.ReplaceAll(model, " ", "-")
+			safeModel := strings.ReplaceAll(modelName, " ", "-")
 			safeModel = strings.ReplaceAll(safeModel, "/", "-")
 			safeModel = strings.ToLower(safeModel)
+
+			// 构建设备选择表达式：匹配该型号的任意设备
+			var memorySelectors []string
+			var aicoreSelectors []string
+
+			for _, deviceName := range deviceList {
+				memorySelectors = append(memorySelectors,
+					fmt.Sprintf("(device.attributes[\"memory\"].int == %d && device.attributes[\"model\"].string == \"%s\")",
+						template.Attributes.Memory, modelName))
+
+				aicoreSelectors = append(aicoreSelectors,
+					fmt.Sprintf("(device.attributes[\"aicore\"].int == %d && device.attributes[\"model\"].string == \"%s\")",
+						template.Attributes.AICORE, modelName))
+			}
+
+			// 使用OR连接多个设备条件
+			memoryExpression := strings.Join(memorySelectors, " || ")
+			aicoreExpression := strings.Join(aicoreSelectors, " || ")
 
 			// 基于内存创建ResourceClaimTemplate
 			memName := fmt.Sprintf("npu-%s-mem%d", safeModel, template.Attributes.Memory)
 			err = createResourceClaimTemplate(clientset, nsName, memName,
-				fmt.Sprintf("device.attributes[\"memory\"].int == %d && device.attributes[\"model\"].string == \"%s\"",
-					template.Attributes.Memory, model),
-				template.Name)
+				memoryExpression, template.Name)
 			if err != nil && !errors.IsAlreadyExists(err) {
 				log.Printf("创建ResourceClaimTemplate %s 失败: %v", memName, err)
 			} else {
@@ -671,9 +703,7 @@ func CreatePredefinedResourceClaimTemplates(vnpuManager *VnpuManager) error {
 			// 基于AICORE创建ResourceClaimTemplate
 			aicoreName := fmt.Sprintf("npu-%s-aicore%d", safeModel, template.Attributes.AICORE)
 			err = createResourceClaimTemplate(clientset, nsName, aicoreName,
-				fmt.Sprintf("device.attributes[\"aicore\"].int == %d && device.attributes[\"model\"].string == \"%s\"",
-					template.Attributes.AICORE, model),
-				template.Name)
+				aicoreExpression, template.Name)
 			if err != nil && !errors.IsAlreadyExists(err) {
 				log.Printf("创建ResourceClaimTemplate %s 失败: %v", aicoreName, err)
 			} else {
