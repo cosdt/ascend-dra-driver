@@ -619,11 +619,12 @@ func (tool *AscendTools) GetChipMem() (int32, error) {
 }
 
 func (tool *AscendTools) getMemorySize(cgoVDevInfo npuCommon.VirtualDevInfo) (int32, error) {
-	// 从TotalResource.Computing.MemorySize获取内存大小（单位：GB）
+	// 从TotalResource.Computing.MemorySize获取内存大小（单位：MB）
 	memorySize := cgoVDevInfo.TotalResource.Computing.MemorySize
+	memorySize = memorySize / 1024
 	// 验证内存大小是否在合理范围内
 	if memorySize <= 0 || memorySize > 1024 { // 假设最大支持1TB内存
-		return 0, fmt.Errorf("invalid memory size %f", memorySize)
+		return 0, fmt.Errorf("invalid memory size %d", memorySize)
 	}
 	return int32(memorySize), nil
 }
