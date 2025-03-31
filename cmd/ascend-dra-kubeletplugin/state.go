@@ -660,7 +660,8 @@ func CreatePredefinedResourceClaimTemplates(vnpuManager *VnpuManager) error {
 				continue
 			}
 
-			memoryExpression := fmt.Sprintf("device.attributes[\""+DriverDomainName+"\"].memory == %d && device.attributes[\""+DriverDomainName+"\"].model == \"%s\"",
+			memoryExpression := fmt.Sprintf("device.attributes[\""+DriverDomainName+"\"]."+
+				"memory >= %d && device.attributes[\""+DriverDomainName+"\"].model == \"%s\"",
 				template.Attributes.Memory, modelName)
 
 			err = createResourceClaimTemplate(clientset, nsName, memName,
@@ -680,7 +681,7 @@ func CreatePredefinedResourceClaimTemplates(vnpuManager *VnpuManager) error {
 				continue
 			}
 
-			aicoreExpression := fmt.Sprintf("device.attributes[\""+DriverDomainName+"\"].aicore == %d && device.attributes[\""+DriverDomainName+"\"].model == \"%s\"",
+			aicoreExpression := fmt.Sprintf("device.attributes[\""+DriverDomainName+"\"].aicore >= %d && device.attributes[\""+DriverDomainName+"\"].model == \"%s\"",
 				template.Attributes.AICORE, modelName)
 
 			err = createResourceClaimTemplate(clientset, nsName, aicoreName,
