@@ -403,7 +403,7 @@ func (s *DeviceState) applyConfig(config *configapi.GpuConfig, results []*resour
 			var prefix string
 			var num1, num2 int
 
-			sliceMatched, err := fmt.Sscanf(deviceID, "%[^-]-%d-%d", &prefix, &num1, &num2)
+			sliceMatched, err := fmt.Sscanf(deviceID, "%s-%d-%d", &prefix, &num1, &num2)
 			if err == nil && sliceMatched == 3 && prefix == "npu" {
 				isSlice = true
 			}
