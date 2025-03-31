@@ -86,6 +86,18 @@ func (d *driver) NodePrepareResources(ctx context.Context, req *drapbv1.NodePrep
 		preparedResources.Claims[claim.UID] = d.nodePrepareResource(ctx, claim)
 	}
 
+	// 所有资源处理完毕后，上报最新的资源状态
+	var resources kubeletplugin.Resources
+	for _, device := range d.state.allocatable {
+		resources.Devices = append(resources.Devices, device)
+	}
+
+	if err := d.plugin.PublishResources(ctx, resources); err != nil {
+		klog.Errorf("Failed to publish resources after preparing claims: %v", err)
+	} else {
+		klog.Infof("Successfully published updated resources after preparing %d claims", len(req.Claims))
+	}
+
 	return preparedResources, nil
 }
 
@@ -117,6 +129,18 @@ func (d *driver) NodeUnprepareResources(ctx context.Context, req *drapbv1.NodeUn
 
 	for _, claim := range req.Claims {
 		unpreparedResources.Claims[claim.UID] = d.nodeUnprepareResource(ctx, claim)
+	}
+
+	// 所有资源处理完毕后，上报最新的资源状态
+	var resources kubeletplugin.Resources
+	for _, device := range d.state.allocatable {
+		resources.Devices = append(resources.Devices, device)
+	}
+
+	if err := d.plugin.PublishResources(ctx, resources); err != nil {
+		klog.Errorf("Failed to publish resources after unpreparing claims: %v", err)
+	} else {
+		klog.Infof("Successfully published updated resources after unpreparing %d claims", len(req.Claims))
 	}
 
 	return unpreparedResources, nil
