@@ -1,6 +1,9 @@
 # 混合使用整卡和vNPU分片
 # 演示在集群中同时运行使用整卡和vNPU分片的Pod
 
+# 使用CEL表达式直接选择NPU设备
+# 演示如何使用CEL表达式精确控制设备选择条件
+
 ---
 apiVersion: v1
 kind: Namespace
@@ -90,4 +93,50 @@ spec:
       - name: npu
   resourceClaims:
   - name: npu
-    resourceClaimTemplateName: vnpu-slice-vir02 
+    resourceClaimTemplateName: vnpu-slice-vir02
+
+---
+apiVersion: resource.k8s.io/v1beta1
+kind: ResourceClaimTemplate
+metadata:
+  namespace: npu-vnpu-test5
+  name: cel-select-template
+spec:
+  spec:
+    devices:
+      requests:
+      - name: npu
+        deviceClassName: npu.example.com
+        selectors:
+        - cel:
+            expression: "device.attributes[\"aicore\"].int >= 4 && device.attributes[\"memory\"].int >= 8 && device.attributes[\"model\"].string == \"Ascend310P\""
+      config:
+      - deviceConfiguration:
+          opaque:
+            driver: example.com/npu
+            parameters:
+              apiVersion: "gpu.resource.example.com/v1alpha1"
+              kind: "GpuConfig"
+              vnpuSpec:
+                templateName: "vir01"
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  namespace: npu-vnpu-test5
+  name: npu-pod-cel
+  labels:
+    app: npu-pod
+spec:
+  containers:
+  - name: npu-container
+    image: ubuntu:22.04
+    command: ["bash", "-c"]
+    args: ["echo 'ASCEND环境变量:'; env | grep ASCEND; echo 'NPU环境变量:'; env | grep NPU; trap 'exit 0' TERM; sleep 9999 & wait"]
+    resources:
+      claims:
+      - name: npu
+  resourceClaims:
+  - name: npu
+    resourceClaimTemplateName: cel-select-template 

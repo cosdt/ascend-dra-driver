@@ -1,5 +1,5 @@
-# 单个Pod使用vNPU分片 - vir01模板
-# 演示如何在Pod中使用vNPU分片
+# 使用整卡模板分配整个NPU设备
+# 演示如何使用基于设备型号的整卡分配
 
 ---
 apiVersion: v1
@@ -8,41 +8,16 @@ metadata:
   name: npu-vnpu-test1
 
 ---
-apiVersion: resource.k8s.io/v1beta1
-kind: ResourceClaimTemplate
-metadata:
-  namespace: npu-vnpu-test1
-  name: vnpu-slice-vir01
-spec:
-  spec:
-    devices:
-      requests:
-      - name: npu
-        deviceClassName: npu.example.com
-        # 使用CEL表达式筛选满足算力要求的NPU
-        selector:
-          - cel:
-              expression: "device.attributes[\"aicore\"] == 4 && device.attributes[\"memory\"] == 8"
-      config:
-      - name: npu
-        driver: example.com/npu
-        parameters:
-          "apiVersion": "gpu.resource.example.com/v1alpha1"
-          "kind": "GpuConfig"
-          "vnpuSpec":
-            "templateName": "vir01"
-
----
 apiVersion: v1
 kind: Pod
 metadata:
   namespace: npu-vnpu-test1
-  name: vnpu-pod-vir01
+  name: npu-pod-fullcard
   labels:
-    app: vnpu-pod
+    app: npu-pod
 spec:
   containers:
-  - name: vnpu-container
+  - name: npu-container
     image: ubuntu:22.04
     command: ["bash", "-c"]
     args: ["echo 'ASCEND环境变量:'; env | grep ASCEND; echo 'NPU环境变量:'; env | grep NPU; trap 'exit 0' TERM; sleep 9999 & wait"]
@@ -51,4 +26,6 @@ spec:
       - name: npu
   resourceClaims:
   - name: npu
-    resourceClaimTemplateName: vnpu-slice-vir01 
+    resourceClaimTemplateRef:
+      name: npu-ascend310p
+      namespace: npu-vnpu-system 
