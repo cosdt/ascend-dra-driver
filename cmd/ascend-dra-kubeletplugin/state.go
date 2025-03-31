@@ -678,12 +678,12 @@ func CreatePredefinedResourceClaimTemplates(vnpuManager *VnpuManager) error {
 
 			for _, deviceName := range deviceList {
 				memorySelectors = append(memorySelectors,
-					fmt.Sprintf("(device.attributes[\"memory\"].int == %d && device.attributes[\"model\"].string == \"%s\")",
-						template.Attributes.Memory, modelName))
+					fmt.Sprintf("(device.attributes[\"memory\"].int == %d && device.name == \"%s\" && device.attributes[\"model\"].string == \"%s\")",
+						template.Attributes.Memory, deviceName, modelName))
 
 				aicoreSelectors = append(aicoreSelectors,
-					fmt.Sprintf("(device.attributes[\"aicore\"].int == %d && device.attributes[\"model\"].string == \"%s\")",
-						template.Attributes.AICORE, modelName))
+					fmt.Sprintf("(device.attributes[\"aicore\"].int == %d && device.name == \"%s\" && device.attributes[\"model\"].string == \"%s\")",
+						template.Attributes.AICORE, deviceName, modelName))
 			}
 
 			// 使用OR连接多个设备条件
