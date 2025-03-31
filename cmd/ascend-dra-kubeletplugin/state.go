@@ -25,6 +25,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	resourceapi "k8s.io/api/resource/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -600,13 +601,13 @@ func CreatePredefinedResourceClaimTemplates(vnpuManager *VnpuManager) error {
 
 	// 使用map记录所有唯一的型号
 	uniqueModels := make(map[string]bool)
-	
+
 	// 使用map记录所有唯一的模板，以属性(AICORE、Memory)作为键
 	uniqueTemplates := make(map[string]*VnpuTemplate)
-	
+
 	// 使用map记录已更新的模板，避免重复更新
 	updatedTemplates := make(map[string]bool)
-	
+
 	// 首先收集所有唯一的设备型号和模板
 	for _, physicalNpu := range vnpuManager.PhysicalNpus {
 		// 记录唯一的型号
@@ -615,7 +616,7 @@ func CreatePredefinedResourceClaimTemplates(vnpuManager *VnpuManager) error {
 			modelName = "unknown"
 		}
 		uniqueModels[modelName] = true
-		
+
 		// 记录唯一的模板
 		for _, template := range physicalNpu.SupportTemplates {
 			key := fmt.Sprintf("aicore-%d-mem-%d", template.Attributes.AICORE, template.Attributes.Memory)
@@ -624,7 +625,7 @@ func CreatePredefinedResourceClaimTemplates(vnpuManager *VnpuManager) error {
 			}
 		}
 	}
-	
+
 	// 为每个唯一型号创建整卡模板
 	for modelName := range uniqueModels {
 		// 去掉型号中可能存在的空格和特殊字符，确保名称合法
@@ -634,12 +635,12 @@ func CreatePredefinedResourceClaimTemplates(vnpuManager *VnpuManager) error {
 
 		// 为该型号创建整卡模板
 		fullCardName := fmt.Sprintf("npu-%s", safeModel)
-		
+
 		// 如果已经更新过这个模板，跳过
 		if updatedTemplates[fullCardName] {
 			continue
 		}
-		
+
 		// 直接使用型号匹配
 		celExpression := fmt.Sprintf("device.attributes[\"model\"].string == \"%s\"", modelName)
 
@@ -663,12 +664,12 @@ func CreatePredefinedResourceClaimTemplates(vnpuManager *VnpuManager) error {
 
 			// 基于内存创建ResourceClaimTemplate
 			memName := fmt.Sprintf("npu-%s-mem%d", safeModel, template.Attributes.Memory)
-			
+
 			// 如果已经更新过这个模板，跳过
 			if updatedTemplates[memName] {
 				continue
 			}
-			
+
 			memoryExpression := fmt.Sprintf("device.attributes[\"memory\"].int == %d && device.attributes[\"model\"].string == \"%s\"",
 				template.Attributes.Memory, modelName)
 
@@ -683,12 +684,12 @@ func CreatePredefinedResourceClaimTemplates(vnpuManager *VnpuManager) error {
 
 			// 基于AICORE创建ResourceClaimTemplate
 			aicoreName := fmt.Sprintf("npu-%s-aicore%d", safeModel, template.Attributes.AICORE)
-			
+
 			// 如果已经更新过这个模板，跳过
 			if updatedTemplates[aicoreName] {
 				continue
 			}
-			
+
 			aicoreExpression := fmt.Sprintf("device.attributes[\"aicore\"].int == %d && device.attributes[\"model\"].string == \"%s\"",
 				template.Attributes.AICORE, modelName)
 
@@ -763,28 +764,32 @@ func createResourceClaimTemplate(clientset *kubernetes.Clientset, namespace, nam
 	}
 
 	// 尝试获取已存在的模板
-	existingRCT, err := clientset.ResourceV1beta1().ResourceClaimTemplates(namespace).Get(
+	_, err = clientset.ResourceV1beta1().ResourceClaimTemplates(namespace).Get(
 		context.TODO(),
 		name,
 		metav1.GetOptions{},
 	)
 
 	if err == nil {
-		// 如果模板存在，更新它
-		existingRCT.Spec = rct.Spec
-		_, err = clientset.ResourceV1beta1().ResourceClaimTemplates(namespace).Update(
+		// 如果模板存在，先删除它
+		err = clientset.ResourceV1beta1().ResourceClaimTemplates(namespace).Delete(
 			context.TODO(),
-			existingRCT,
-			metav1.UpdateOptions{},
+			name,
+			metav1.DeleteOptions{},
 		)
-	} else if errors.IsNotFound(err) {
-		// 如果模板不存在，创建新的
-		_, err = clientset.ResourceV1beta1().ResourceClaimTemplates(namespace).Create(
-			context.TODO(),
-			rct,
-			metav1.CreateOptions{},
-		)
+		if err != nil {
+			return fmt.Errorf("删除已存在的ResourceClaimTemplate失败: %v", err)
+		}
+		// 等待一小段时间确保删除完成
+		time.Sleep(time.Second)
 	}
+
+	// 创建新的模板
+	_, err = clientset.ResourceV1beta1().ResourceClaimTemplates(namespace).Create(
+		context.TODO(),
+		rct,
+		metav1.CreateOptions{},
+	)
 
 	return err
 }
