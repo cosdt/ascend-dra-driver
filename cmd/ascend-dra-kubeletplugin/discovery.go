@@ -27,7 +27,6 @@ import (
 
 	"huawei.com/npu-exporter/v5/devmanager"
 	resourceapi "k8s.io/api/resource/v1beta1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/utils/ptr"
 
 	"github.com/google/uuid"
@@ -142,10 +141,7 @@ func enumerateAllPossibleDevices() (AllocatableDevices, *VnpuManager, error) {
 		device := resourceapi.Device{
 			Name: deviceName,
 			Basic: &resourceapi.BasicDevice{
-				Attributes: devAttributes,
-				Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
-					"memory": {Value: resource.MustParse("32Gi")},
-				},
+				Attributes: devAttributes
 			},
 		}
 		alldevices[device.Name] = device
