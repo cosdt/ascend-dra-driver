@@ -272,7 +272,7 @@ func (s *DeviceState) prepareDevices(claim *resourceapi.ResourceClaim) (Prepared
 
 			for _, config := range configs {
 				if gpuConfig, ok := config.Config.(*configapi.GpuConfig); ok {
-					if gpuConfig.VnpuSpec != nil && templateName != "" {
+					if gpuConfig.VnpuSpec != nil && gpuConfig.VnpuSpec.TemplateName != "" {
 						// 从VnpuSpec中获取模板名称
 						templateName = gpuConfig.VnpuSpec.TemplateName
 						// 根据模板名称查找对应的资源配置
