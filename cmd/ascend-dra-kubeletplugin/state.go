@@ -400,10 +400,11 @@ func (s *DeviceState) applyConfig(config *configapi.GpuConfig, results []*resour
 
 			// 检查是否为分片的命名模式 npu-x-y
 			isSlice := false
-			var sliceID string
+			var prefix string
+			var num1, num2 int
 
-			sliceMatched, err := fmt.Sscanf(deviceID, "%s-%d-%d", &sliceID, &sliceID, &sliceID)
-			if err == nil && sliceMatched == 3 {
+			sliceMatched, err := fmt.Sscanf(deviceID, "%[^-]-%d-%d", &prefix, &num1, &num2)
+			if err == nil && sliceMatched == 3 && prefix == "npu" {
 				isSlice = true
 			}
 
