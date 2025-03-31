@@ -625,16 +625,6 @@ func CreatePredefinedResourceClaimTemplates(vnpuManager *VnpuManager) error {
 		}
 	}
 	
-	// 检查指定资源模板是否已存在
-	templateExists := func(name string) bool {
-		_, err := clientset.ResourceV1beta1().ResourceClaimTemplates(nsName).Get(
-			context.TODO(),
-			name,
-			metav1.GetOptions{},
-		)
-		return err == nil
-	}
-
 	// 为每个唯一型号创建整卡模板
 	for modelName := range uniqueModels {
 		// 去掉型号中可能存在的空格和特殊字符，确保名称合法
