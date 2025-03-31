@@ -5,13 +5,13 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: npu-vnpu-test1
+  name: npu-vnpu-system
 
 ---
 apiVersion: v1
 kind: Pod
 metadata:
-  namespace: npu-vnpu-test1
+  namespace: npu-vnpu-system
   name: npu-pod-fullcard
   labels:
     app: npu-pod
@@ -26,6 +26,4 @@ spec:
       - name: npu
   resourceClaims:
   - name: npu
-    resourceClaimTemplateRef:
-      name: npu-ascend310p
-      namespace: npu-vnpu-system 
+    resourceClaimTemplateName: npu-ascend310p
