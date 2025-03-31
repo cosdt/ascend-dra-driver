@@ -22,13 +22,14 @@ import (
 	"strings"
 	"time"
 
+	"Ascend-dra-driver/pkg/common"
+	"Ascend-dra-driver/pkg/kubeclient"
+
 	"huawei.com/npu-exporter/v5/devmanager"
 	npuCommon "huawei.com/npu-exporter/v5/devmanager/common"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"Ascend-dra-driver/pkg/common"
-	"Ascend-dra-driver/pkg/kubeclient"
 )
 
 // AscendTools struct definition
@@ -591,4 +592,37 @@ func (tool *AscendTools) getAiCoreCount(cgoVDevInfo npuCommon.VirtualDevInfo) (i
 		return 0, fmt.Errorf("invalid ai core num %f", chipAICore)
 	}
 	return int32(chipAICore), nil
+}
+
+// GetChipMem get chip memory size
+func (tool *AscendTools) GetChipMem() (int32, error) {
+	_, logicIDs, err := tool.dmgr.GetDeviceList()
+	if err != nil {
+		return 0, err
+	}
+	if len(logicIDs) < 1 {
+		return 0, fmt.Errorf("not found logicIDs")
+	}
+	for _, logicID := range logicIDs {
+		cgoVDevInfo, err := tool.dmgr.GetVirtualDeviceInfo(logicID)
+		if err != nil && strings.Contains(err.Error(), strconv.Itoa(common.DeviceNotSupport)) {
+			return common.DeviceNotSupport, nil
+		}
+		if err != nil {
+			// if not support found memory size, setting a default value
+			return 32, nil // 默认32GB内存
+		}
+		return tool.getMemorySize(cgoVDevInfo)
+	}
+	return 0, fmt.Errorf("not get memory size")
+}
+
+func (tool *AscendTools) getMemorySize(cgoVDevInfo npuCommon.VirtualDevInfo) (int32, error) {
+	// 从TotalResource.Computing.MemorySize获取内存大小（单位：GB）
+	memorySize := cgoVDevInfo.TotalResource.Computing.MemorySize
+	// 验证内存大小是否在合理范围内
+	if memorySize <= 0 || memorySize > 1024 { // 假设最大支持1TB内存
+		return 0, fmt.Errorf("invalid memory size %f", memorySize)
+	}
+	return int32(memorySize), nil
 }

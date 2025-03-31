@@ -139,6 +139,16 @@ func (hdm *HwDevManager) updateNodeServerType(aiCoreCount int32) error {
 	return fmt.Errorf("update server type to node label failed")
 }
 
+// GetChipAiCoreCount 获取芯片AI Core计数
+func (hdm *HwDevManager) GetChipAiCoreCount() (int32, error) {
+	return hdm.manager.GetChipAiCoreCount()
+}
+
+// GetChipMem 获取芯片内存大小
+func (hdm *HwDevManager) GetChipMem() (int32, error) {
+	return hdm.manager.GetChipMem()
+}
+
 func (hdm *HwDevManager) setAllDeviceAndType() error {
 	var err error
 	if hdm.AllInfo, err = hdm.manager.GetNPUs(); err != nil {

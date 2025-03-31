@@ -21,6 +21,7 @@ import (
 	"log"
 	"math/rand"
 	"os"
+	"strings"
 
 	"Ascend-dra-driver/pkg/server"
 
@@ -74,12 +75,57 @@ func enumerateAllPossibleDevices() (AllocatableDevices, *VnpuManager, error) {
 				maxAicore := 0
 				maxMemory := 0
 
-				for _, template := range physicalNpu.SupportTemplates {
-					if template.Attributes.AICORE > maxAicore {
-						maxAicore = template.Attributes.AICORE
+				// 检查NPU是否已被拆分
+				isAlreadySplit := len(physicalNpu.AllocatedSlices) > 0
+
+				if !isAlreadySplit {
+					// 如果NPU未被拆分，应该使用整卡的物理资源值
+					// 使用底层函数直接获取整卡资源值
+					// 获取整卡AI Core数量
+					aiCoreCount, err := hdm.GetChipAiCoreCount()
+					if err == nil {
+						maxAicore = int(aiCoreCount)
+					} else {
+						log.Printf("获取整卡AI Core数量失败: %v，使用默认值", err)
+						// 回退到之前的方法，使用预定义值
+						if strings.Contains(dev.DevType, "Ascend910") {
+							maxAicore = 32
+						} else if strings.Contains(dev.DevType, "Ascend310P") {
+							maxAicore = 16
+						}
 					}
-					if template.Attributes.Memory > maxMemory {
-						maxMemory = template.Attributes.Memory
+
+					// 获取整卡内存大小
+					memSize, err := hdm.GetChipMem()
+					if err == nil {
+						maxMemory = int(memSize)
+					} else {
+						log.Printf("获取整卡内存大小失败: %v，使用默认值", err)
+						// 回退到之前的方法，使用预定义值
+						if strings.Contains(dev.DevType, "Ascend910") {
+							maxMemory = 32
+						} else if strings.Contains(dev.DevType, "Ascend310P") {
+							maxMemory = 16
+						}
+					}
+				} else {
+					// 如果NPU已被拆分，计算后续最大可用模板的算力值
+					// 只考虑剩余可用的模板（即经过updateSupportTemplates更新后的模板）
+					availableTemplates := physicalNpu.SupportTemplates
+					if len(availableTemplates) > 0 {
+						// 从剩余可用的模板中找出最大算力
+						for _, template := range availableTemplates {
+							if template.Attributes.AICORE > maxAicore {
+								maxAicore = template.Attributes.AICORE
+							}
+							if template.Attributes.Memory > maxMemory {
+								maxMemory = template.Attributes.Memory
+							}
+						}
+					} else {
+						// 如果没有可用模板，则表示无法再分配，将值设为0
+						maxAicore = 0
+						maxMemory = 0
 					}
 				}
 

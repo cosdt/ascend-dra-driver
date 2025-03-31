@@ -144,12 +144,10 @@ func NewDeviceState(config *Config) (*DeviceState, error) {
 		if c == DriverPluginCheckpointFile {
 			// 创建预定义的ResourceClaimTemplate
 			if vnpuManager != nil {
-				go func() {
-					// 异步创建，避免阻塞驱动启动
-					if err := CreatePredefinedResourceClaimTemplates(vnpuManager); err != nil {
-						log.Printf("创建预定义ResourceClaimTemplate失败: %v", err)
-					}
-				}()
+				// 异步创建，避免阻塞驱动启动
+				if err := CreatePredefinedResourceClaimTemplates(vnpuManager); err != nil {
+					log.Printf("创建预定义ResourceClaimTemplate失败: %v", err)
+				}
 			}
 			return state, nil
 		}
