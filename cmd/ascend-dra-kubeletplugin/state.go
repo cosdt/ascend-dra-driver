@@ -642,7 +642,7 @@ func CreatePredefinedResourceClaimTemplates(vnpuManager *VnpuManager) error {
 		}
 
 		// 直接使用型号匹配
-		celExpression := fmt.Sprintf("device.attributes[\""+DriverDomain+"\"].model == \"%s\"", modelName)
+		celExpression := fmt.Sprintf("device.attributes[\""+DriverDomainName+"\"].model == \"%s\"", modelName)
 
 		err = createResourceClaimTemplate(clientset, nsName, fullCardName,
 			celExpression, "") // 整卡没有特定模板名称
@@ -670,7 +670,7 @@ func CreatePredefinedResourceClaimTemplates(vnpuManager *VnpuManager) error {
 				continue
 			}
 
-			memoryExpression := fmt.Sprintf("device.attributes[\""+DriverDomain+"\"].memory == %d && device.attributes[\""+DriverDomain+"\"].model == \"%s\"",
+			memoryExpression := fmt.Sprintf("device.attributes[\""+DriverDomainName+"\"].memory == %d && device.attributes[\""+DriverDomainName+"\"].model == \"%s\"",
 				template.Attributes.Memory, modelName)
 
 			err = createResourceClaimTemplate(clientset, nsName, memName,
@@ -690,7 +690,7 @@ func CreatePredefinedResourceClaimTemplates(vnpuManager *VnpuManager) error {
 				continue
 			}
 
-			aicoreExpression := fmt.Sprintf("device.attributes[\""+DriverDomain+"\"].aicore == %d && device.attributes[\""+DriverDomain+"\"].model == \"%s\"",
+			aicoreExpression := fmt.Sprintf("device.attributes[\""+DriverDomainName+"\"].aicore == %d && device.attributes[\""+DriverDomainName+"\"].model == \"%s\"",
 				template.Attributes.AICORE, modelName)
 
 			err = createResourceClaimTemplate(clientset, nsName, aicoreName,
