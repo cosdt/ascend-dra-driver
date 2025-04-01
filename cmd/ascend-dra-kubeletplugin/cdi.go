@@ -19,7 +19,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	cdiapi "tags.cncf.io/container-device-interface/pkg/cdi"
 	cdiparser "tags.cncf.io/container-device-interface/pkg/parser"
@@ -85,31 +84,21 @@ func (cdi *CDIHandler) CreateCommonSpecFile() error {
 // CreateClaimSpecFile 为给定 claim 创建临时 CDI spec 文件
 // 修改点：将所有分配到的设备名称聚合后，以环境变量 ASCEND_VISIBLE_DEVICES 注入到 Pod 中
 func (cdi *CDIHandler) CreateClaimSpecFile(claimUID string, devices PreparedDevices) error {
-	var logicIDs []string
-	for _, device := range devices {
-		// 假设 device.DeviceName 形如 "npu-<LogicID>"
-		logicID := strings.TrimPrefix(device.DeviceName, "npu-")
-		logicIDs = append(logicIDs, logicID)
-	}
-	visibleDevices := strings.Join(logicIDs, ",")
-
-	specName := cdiapi.GenerateTransientSpecName(cdiVendor, cdiClass, claimUID)
-
 	spec := &cdispec.Spec{
-		Kind: cdiKind,
-		Devices: []cdispec.Device{
-			{
-				// 使用 claimUID 作为 CDI 设备名称
-				Name: claimUID,
-				ContainerEdits: cdispec.ContainerEdits{
-					Env: []string{
-						// 注入环境变量，告知 Pod 哪些 NPU 设备应该暴露
-						fmt.Sprintf("ASCEND_VISIBLE_DEVICES=%s", visibleDevices),
-					},
-				},
-			},
-		},
+		Kind:           cdiKind,
+		Devices:        []cdispec.Device{},
+		ContainerEdits: cdispec.ContainerEdits{},
 	}
+
+	for _, device := range devices {
+		spec.Devices = append(spec.Devices, device.Devices...)
+		spec.ContainerEdits.Env = append(spec.ContainerEdits.Env, device.ContainerEdits.Env...)
+		spec.ContainerEdits.DeviceNodes = append(spec.ContainerEdits.DeviceNodes, device.ContainerEdits.DeviceNodes...)
+		spec.ContainerEdits.Hooks = append(spec.ContainerEdits.Hooks, device.ContainerEdits.Hooks...)
+		spec.ContainerEdits.Mounts = append(spec.ContainerEdits.Mounts, device.ContainerEdits.Mounts...)
+	}
+ 
+	specName := cdiapi.GenerateTransientSpecName(cdiVendor, cdiClass, claimUID)
 
 	minVersion, err := cdiapi.MinimumRequiredVersion(spec)
 	if err != nil {

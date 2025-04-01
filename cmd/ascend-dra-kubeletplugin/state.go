@@ -45,7 +45,7 @@ import (
 )
 
 type AllocatableDevices map[string]resourceapi.Device
-type PreparedDevices []*PreparedDevice
+type PreparedDevices []*cdispec.Spec
 type PreparedClaims map[string]PreparedDevices
 type PerDeviceCDIContainerEdits map[string]*cdiapi.ContainerEdits
 
@@ -387,8 +387,8 @@ func (s *DeviceState) applyConfig(config *configapi.GpuConfig, results []*resour
 
 	for _, result := range results {
 		envs := []string{
-			fmt.Sprintf("NPU_DEVICE_%s=%s", result.Device[4:], result.Device),
-			fmt.Sprintf("ASCEND_VISIBLE_DEVICES=%s", result.Device[4:]), // 设置ASCEND_VISIBLE_DEVICES为NPU的LogicID
+			// 设置ASCEND_VISIBLE_DEVICES为NPU的LogicID
+			fmt.Sprintf("ASCEND_VISIBLE_DEVICES=%s", result.Device[4:5]),
 		}
 
 		// 检查是否需要设置vNPU规格
