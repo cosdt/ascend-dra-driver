@@ -91,9 +91,14 @@ func (cdi *CDIHandler) CreateClaimSpecFile(claimUID string, devices PreparedDevi
 	}
 
 	for _, device := range devices {
+		containerEdits := cdispec.ContainerEdits{}
+		containerEdits.Env = append(containerEdits.Env, device.ContainerEdits.Env...)
+		containerEdits.DeviceNodes = append(containerEdits.DeviceNodes, device.ContainerEdits.DeviceNodes...)
+		containerEdits.Hooks = append(containerEdits.Hooks, device.ContainerEdits.Hooks...)
+		containerEdits.Mounts = append(containerEdits.Mounts, device.ContainerEdits.Mounts...)
 		spec.Devices = append(spec.Devices, cdispec.Device{
 			Name:           device.Device.DeviceName,
-			ContainerEdits: spec.ContainerEdits,
+			ContainerEdits: cdispec.ContainerEdits{},
 		})
 	}
 
