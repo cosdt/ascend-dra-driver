@@ -12,5 +12,5 @@ rules:
   resources: ["nodes", "namespaces"]
   verbs: ["get", "create", "list"]
 - apiGroups: ["resource.k8s.io"]
-  resources: ["resourceslices", "resourceclaimtemplates"]
+  resources: ["resourceslices", "deviceclasses"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
