@@ -91,13 +91,12 @@ func (cdi *CDIHandler) CreateClaimSpecFile(claimUID string, devices PreparedDevi
 	}
 
 	for _, device := range devices {
-		spec.Devices = append(spec.Devices, device.Devices...)
-		spec.ContainerEdits.Env = append(spec.ContainerEdits.Env, device.ContainerEdits.Env...)
-		spec.ContainerEdits.DeviceNodes = append(spec.ContainerEdits.DeviceNodes, device.ContainerEdits.DeviceNodes...)
-		spec.ContainerEdits.Hooks = append(spec.ContainerEdits.Hooks, device.ContainerEdits.Hooks...)
-		spec.ContainerEdits.Mounts = append(spec.ContainerEdits.Mounts, device.ContainerEdits.Mounts...)
+		spec.Devices = append(spec.Devices, cdispec.Device{
+			Name:           device.Device.DeviceName,
+			ContainerEdits: spec.ContainerEdits,
+		})
 	}
- 
+
 	specName := cdiapi.GenerateTransientSpecName(cdiVendor, cdiClass, claimUID)
 
 	minVersion, err := cdiapi.MinimumRequiredVersion(spec)

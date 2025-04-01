@@ -45,7 +45,7 @@ import (
 )
 
 type AllocatableDevices map[string]resourceapi.Device
-type PreparedDevices []*cdispec.Spec
+type PreparedDevices []*PreparedDevice
 type PreparedClaims map[string]PreparedDevices
 type PerDeviceCDIContainerEdits map[string]*cdiapi.ContainerEdits
 
