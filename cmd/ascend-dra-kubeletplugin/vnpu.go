@@ -1,19 +1,3 @@
-/*
- * Copyright 2023 The Kubernetes Authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package main
 
 import (
@@ -26,71 +10,51 @@ import (
 	"strings"
 )
 
-// 获取NPU支持的模板信息
-func GetNpuTemplateInfo() (map[string]*VnpuTemplate, error) {
-	log.Println("开始获取NPU模板信息...")
-
-	// 从挂载文件读取模板信息
-	templateFilePath := "/etc/npu/template-info.txt"
-	content, err := os.ReadFile(templateFilePath)
+// NewVnpuManager creates and initializes a new VnpuManager.
+func NewVnpuManager() (*VnpuManager, error) {
+	templates, err := GetNpuTemplateInfo()
 	if err != nil {
-		// 如果找不到文件，尝试创建模拟数据（便于测试）
-		log.Printf("读取模板信息文件失败: %v, 将使用模拟数据", err)
-
-		// 创建示例模板数据
-		templates := createDefaultTemplates()
-		return templates, nil
+		return nil, fmt.Errorf("failed to get NPU template info: %v", err)
 	}
+	return &VnpuManager{
+		PhysicalNpus: make(map[string]*PhysicalNpuState),
+		Templates:    templates,
+	}, nil
+}
 
-	templates := make(map[string]*VnpuTemplate)
-	err = parseTemplateInfo(string(content), templates)
+// GetNpuTemplateInfo attempts to read the NPU template information from a file.
+// If the file is not found, it falls back to default templates.
+func GetNpuTemplateInfo() (map[string]*VnpuTemplate, error) {
+	filePath := "/etc/npu/template-info.txt"
+	content, err := os.ReadFile(filePath)
 	if err != nil {
+		log.Printf("Failed to read template file: %v. Using default templates.", err)
+		return createDefaultTemplates(), nil
+	}
+	templates := make(map[string]*VnpuTemplate)
+	if err := parseTemplateInfo(string(content), templates); err != nil {
 		return nil, err
 	}
-
-	log.Printf("成功从文件解析NPU模板信息，共发现%d个模板", len(templates))
+	log.Printf("Successfully loaded %d templates from file.", len(templates))
 	return templates, nil
 }
 
-// 创建默认模板数据（当无法从文件读取时使用）
+// createDefaultTemplates generates a set of default templates.
 func createDefaultTemplates() map[string]*VnpuTemplate {
-	templates := make(map[string]*VnpuTemplate)
-
-	// 添加一些默认模板
-	templates["vir01"] = &VnpuTemplate{
-		Name: "vir01",
-		Attributes: VnpuTemplateAttribute{
-			AICORE: 4,
-			Memory: 8,
-		},
+	templates := map[string]*VnpuTemplate{
+		"vir01": {Name: "vir01", Attributes: VnpuTemplateAttribute{AICORE: 4, Memory: 8}},
+		"vir02": {Name: "vir02", Attributes: VnpuTemplateAttribute{AICORE: 8, Memory: 12}},
+		"vir04": {Name: "vir04", Attributes: VnpuTemplateAttribute{AICORE: 16, Memory: 16}},
 	}
-
-	templates["vir02"] = &VnpuTemplate{
-		Name: "vir02",
-		Attributes: VnpuTemplateAttribute{
-			AICORE: 8,
-			Memory: 12,
-		},
-	}
-
-	templates["vir04"] = &VnpuTemplate{
-		Name: "vir04",
-		Attributes: VnpuTemplateAttribute{
-			AICORE: 16,
-			Memory: 16,
-		},
-	}
-
-	log.Printf("使用默认模板数据，共%d个模板", len(templates))
+	log.Printf("Using default templates. Total: %d", len(templates))
 	return templates
 }
 
-// 解析npu-smi template-info输出
+// parseTemplateInfo parses the template info string and populates the templates map.
 func parseTemplateInfo(output string, templates map[string]*VnpuTemplate) error {
 	scanner := bufio.NewScanner(strings.NewReader(output))
 
-	// 1. 找第一行表头（含Name、AICORE、Memory）
-	headerLine := ""
+	var headerLine string
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.Contains(line, "Name") && strings.Contains(line, "AICORE") && strings.Contains(line, "Memory") {
@@ -99,23 +63,21 @@ func parseTemplateInfo(output string, templates map[string]*VnpuTemplate) error 
 		}
 	}
 	if headerLine == "" {
-		return fmt.Errorf("未找到模板信息表头")
+		return fmt.Errorf("failed to find template info header")
 	}
 
-	// 2. 解析表头
 	headerLine = strings.Trim(headerLine, "|")
 	headerFields := regexp.MustCompile(`\s+`).Split(strings.TrimSpace(headerLine), -1)
-	columnPositions := make(map[string]int)
+	columnPositions := map[string]int{}
 	for i, field := range headerFields {
 		columnPositions[field] = i
 	}
 
-	// 3. 跳过表头的下一行（即带 "GB PNGD VDEC JPEGE" 的那行）
+	// Skip the line immediately after the header
 	if scanner.Scan() {
-		// 不做任何处理，直接丢弃
 	}
 
-	// 4. 再继续跳过，直到找到包含"=="的分隔行
+	// Skip until we reach a line containing "=="
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.Contains(line, "==") {
@@ -123,242 +85,170 @@ func parseTemplateInfo(output string, templates map[string]*VnpuTemplate) error 
 		}
 	}
 
-	// 5. 解析表格内容
-	var currentTemplate string
-	var currentAttrs *VnpuTemplateAttribute
+	var (
+		currentTemplate string
+		currentAttrs    *VnpuTemplateAttribute
+	)
 	for scanner.Scan() {
-		line := scanner.Text()
-		// 去掉左右的 "|"
-		line = strings.Trim(line, "|")
-		line = strings.TrimSpace(line)
-
-		// 空行或分隔符行跳过
+		line := strings.TrimSpace(strings.Trim(scanner.Text(), "|"))
 		if line == "" || strings.Contains(line, "--") {
 			continue
 		}
-
-		// 按空格分割
 		fields := regexp.MustCompile(`\s+`).Split(line, -1)
-
-		// 第一列如果有内容，说明是一个新的模板行
 		if len(fields) > 0 && strings.HasPrefix(fields[0], "vir") {
 			currentTemplate = fields[0]
 			currentAttrs = &VnpuTemplateAttribute{}
-
-			// 提取 AICORE 和 Memory
 			for attr, pos := range columnPositions {
-				// 不处理 "Name" 本身
-				if attr == "Name" {
+				if attr == "Name" || pos >= len(fields) {
 					continue
 				}
-				if pos < len(fields) {
-					valStr := fields[pos]
-					// 如果是Memory列，去掉"GB"
-					if attr == "Memory" {
-						valStr = strings.TrimSuffix(valStr, "GB")
-					}
-					val, err := strconv.Atoi(valStr)
-					if err != nil {
-						log.Printf("警告：解析属性 %s 的值 %s 失败: %v", attr, fields[pos], err)
-						continue
-					}
-					switch attr {
-					case "AICORE":
-						currentAttrs.AICORE = val
-					case "Memory":
-						currentAttrs.Memory = val
-					}
+				valStr := fields[pos]
+				if attr == "Memory" {
+					valStr = strings.TrimSuffix(valStr, "GB")
+				}
+				val, err := strconv.Atoi(valStr)
+				if err != nil {
+					log.Printf("Warning: failed to parse %s value %s: %v", attr, fields[pos], err)
+					continue
+				}
+				switch attr {
+				case "AICORE":
+					currentAttrs.AICORE = val
+				case "Memory":
+					currentAttrs.Memory = val
 				}
 			}
-
-			// 存入map
 			templates[currentTemplate] = &VnpuTemplate{
 				Name:       currentTemplate,
 				Attributes: *currentAttrs,
 			}
-		} else if currentTemplate != "" && len(fields) > 1 {
-			// 这是附加属性行(比如VPC/VENC等)，由于我们只关心AICORE和Memory，直接跳过即可
-			continue
 		}
 	}
-
 	return nil
 }
 
-// 初始化VnpuManager
-func NewVnpuManager() (*VnpuManager, error) {
-	templates, err := GetNpuTemplateInfo()
-	if err != nil {
-		return nil, fmt.Errorf("获取NPU模板信息失败: %v", err)
-	}
-
-	manager := &VnpuManager{
-		PhysicalNpus: make(map[string]*PhysicalNpuState),
-		Templates:    templates,
-	}
-
-	return manager, nil
-}
-
-// 初始化物理NPU
+// InitPhysicalNpu initializes a physical NPU, using the entire card as a default available slice.
 func (m *VnpuManager) InitPhysicalNpu(deviceName string, logicID int32, modelName string) {
 	m.Lock()
 	defer m.Unlock()
 
-	log.Printf("初始化物理NPU: %s, LogicID: %d, 型号: %s", deviceName, logicID, modelName)
+	if _, exists := m.PhysicalNpus[deviceName]; exists {
+		log.Printf("Physical NPU %s already exists, skipping initialization.", deviceName)
+		return
+	}
 
-	// 创建物理NPU状态对象
-	physicalNpu := &PhysicalNpuState{
+	npu := &PhysicalNpuState{
 		DeviceName:       deviceName,
 		LogicID:          logicID,
 		ModelName:        modelName,
 		AvailableSlices:  []*VnpuSlice{},
 		AllocatedSlices:  []*VnpuSlice{},
-		SupportTemplates: make(map[string]*VnpuTemplate),
+		SupportTemplates: cloneTemplates(m.Templates),
 	}
-
-	// 添加所有支持的模板
-	for name, template := range m.Templates {
-		physicalNpu.SupportTemplates[name] = template
-	}
-
-	// 添加"整卡"作为默认可用分片
-	slice := &VnpuSlice{
-		SliceID:      deviceName, // 整卡时SliceID等于设备名
-		TemplateName: "",         // 整卡没有特定模板
+	npu.AvailableSlices = append(npu.AvailableSlices, &VnpuSlice{
+		SliceID:      deviceName,
+		TemplateName: "",
 		Allocated:    false,
-	}
-	physicalNpu.AvailableSlices = append(physicalNpu.AvailableSlices, slice)
+	})
+	m.PhysicalNpus[deviceName] = npu
 
-	m.PhysicalNpus[deviceName] = physicalNpu
-	log.Printf("物理NPU %s 初始化完成", deviceName)
+	log.Printf("Physical NPU %s has been initialized.", deviceName)
 }
 
-// 释放vNPU切片
+// ReleaseSlice releases the specified VNPU slice.
 func (m *VnpuManager) ReleaseSlice(sliceID string) error {
 	m.Lock()
 	defer m.Unlock()
 
-	log.Printf("尝试释放vNPU切片: %s", sliceID)
-
-	// 查找切片所属的物理NPU
-	var physicalNpu *PhysicalNpuState
-	var sliceIndex int
-	found := false
-
-	for _, npu := range m.PhysicalNpus {
-		for i, slice := range npu.AllocatedSlices {
-			if slice.SliceID == sliceID {
-				physicalNpu = npu
-				sliceIndex = i
-				found = true
-				break
-			}
-		}
-		if found {
-			break
-		}
+	pnpu, idx, slice, err := m.findAllocatedSlice(sliceID)
+	if err != nil {
+		return err
 	}
 
-	if !found {
-		return fmt.Errorf("找不到vNPU切片: %s", sliceID)
-	}
+	pnpu.AllocatedSlices = append(pnpu.AllocatedSlices[:idx], pnpu.AllocatedSlices[idx+1:]...)
+	slice.Allocated = false
 
-	// 移除已分配的切片
-	slice := physicalNpu.AllocatedSlices[sliceIndex]
-	physicalNpu.AllocatedSlices = append(physicalNpu.AllocatedSlices[:sliceIndex], physicalNpu.AllocatedSlices[sliceIndex+1:]...)
-
-	// 如果是整卡，将其添加回可用切片
-	if slice.SliceID == physicalNpu.DeviceName {
-		slice.Allocated = false
-		physicalNpu.AvailableSlices = append(physicalNpu.AvailableSlices, slice)
-		log.Printf("成功释放物理NPU %s 的整卡", physicalNpu.DeviceName)
+	// If this is the entire card, simply restore it as available.
+	if slice.SliceID == pnpu.DeviceName {
+		pnpu.AvailableSlices = append(pnpu.AvailableSlices, slice)
+		log.Printf("Successfully released the entire card for NPU %s.", pnpu.DeviceName)
 		return nil
 	}
 
-	// 如果没有分配的切片，恢复整卡可用
-	if len(physicalNpu.AllocatedSlices) == 0 {
-		found := false
-		for _, slice := range physicalNpu.AvailableSlices {
-			if slice.SliceID == physicalNpu.DeviceName {
-				found = true
-				break
-			}
-		}
-
-		if !found {
-			wholeCardSlice := &VnpuSlice{
-				SliceID:      physicalNpu.DeviceName,
-				TemplateName: "",
-				Allocated:    false,
-			}
-			physicalNpu.AvailableSlices = append(physicalNpu.AvailableSlices, wholeCardSlice)
-		}
+	// If all slices are now released, restore the entire card as available.
+	if len(pnpu.AllocatedSlices) == 0 && !m.wholeCardIsAvailable(pnpu) {
+		pnpu.AvailableSlices = append(pnpu.AvailableSlices, &VnpuSlice{
+			SliceID:      pnpu.DeviceName,
+			TemplateName: "",
+			Allocated:    false,
+		})
 	}
 
-	// 更新当前NPU支持的模板
-	m.updateSupportTemplates(physicalNpu)
-
-	log.Printf("成功释放vNPU切片: %s", sliceID)
+	m.updateSupportTemplates(pnpu)
+	log.Printf("Successfully released VNPU slice %s.", sliceID)
 	return nil
 }
 
-// 更新物理NPU支持的模板列表
-func (m *VnpuManager) updateSupportTemplates(physicalNpu *PhysicalNpuState) {
-	// 如果有分片被分配，重新计算支持的模板
-	if len(physicalNpu.AllocatedSlices) > 0 {
-		// 清空当前支持的模板
-		physicalNpu.SupportTemplates = make(map[string]*VnpuTemplate)
-
-		// 添加仍然可用的模板
-		// 这里需要根据已分配的资源计算剩余资源，然后确定哪些模板仍然可用
-		// 简化实现，这里假设任何分片分配后，只支持指定的一些模板
-		for name, template := range m.Templates {
-			// 这里根据实际情况检查模板是否仍可用
-			// 简化示例：只保留小型模板
-			if strings.HasPrefix(name, "vir01") {
-				physicalNpu.SupportTemplates[name] = template
-			}
-		}
-	} else {
-		// 如果没有分片被分配，支持所有模板
-		physicalNpu.SupportTemplates = make(map[string]*VnpuTemplate)
-		for name, template := range m.Templates {
-			physicalNpu.SupportTemplates[name] = template
-		}
-	}
-}
-
-// 获取设备对应的ASCEND_VNPU_SPECS环境变量值
+// GetVnpuSpecsEnv returns the ASCEND_VNPU_SPECS environment variable for a given slice.
 func (m *VnpuManager) GetVnpuSpecsEnv(sliceID string) (string, error) {
 	m.Lock()
 	defer m.Unlock()
 
-	// 查找切片
-	var slice *VnpuSlice
-	found := false
-
-	for _, npu := range m.PhysicalNpus {
-		for _, s := range npu.AllocatedSlices {
-			if s.SliceID == sliceID {
-				slice = s
-				found = true
-				break
-			}
-		}
-		if found {
-			break
-		}
+	_, _, slice, err := m.findAllocatedSlice(sliceID)
+	if err != nil {
+		return "", err
 	}
-
-	if !found {
-		return "", fmt.Errorf("找不到vNPU切片: %s", sliceID)
-	}
-
-	// 整卡时，不需要设置ASCEND_VNPU_SPECS
 	if slice.TemplateName == "" {
 		return "", nil
 	}
-
 	return slice.TemplateName, nil
+}
+
+// findAllocatedSlice is a helper method to locate an allocated slice by its ID.
+func (m *VnpuManager) findAllocatedSlice(sliceID string) (*PhysicalNpuState, int, *VnpuSlice, error) {
+	for _, npu := range m.PhysicalNpus {
+		for i, s := range npu.AllocatedSlices {
+			if s.SliceID == sliceID {
+				return npu, i, s, nil
+			}
+		}
+	}
+	return nil, -1, nil, fmt.Errorf("VNPU slice %s not found", sliceID)
+}
+
+// wholeCardIsAvailable checks if the entire card slice is in the available slices.
+func (m *VnpuManager) wholeCardIsAvailable(npu *PhysicalNpuState) bool {
+	for _, s := range npu.AvailableSlices {
+		if s.SliceID == npu.DeviceName {
+			return true
+		}
+	}
+	return false
+}
+
+// updateSupportTemplates updates the set of templates supported by the physical NPU.
+func (m *VnpuManager) updateSupportTemplates(npu *PhysicalNpuState) {
+	// If no slices are allocated, support all templates.
+	if len(npu.AllocatedSlices) == 0 {
+		npu.SupportTemplates = cloneTemplates(m.Templates)
+		return
+	}
+	// Otherwise, filter templates as needed.
+	npu.SupportTemplates = make(map[string]*VnpuTemplate)
+	for name, tpl := range m.Templates {
+		// For example, keep only "vir01" when any slice is allocated.
+		if strings.HasPrefix(name, "vir01") {
+			npu.SupportTemplates[name] = tpl
+		}
+	}
+}
+
+// cloneTemplates performs a shallow copy of the templates.
+func cloneTemplates(src map[string]*VnpuTemplate) map[string]*VnpuTemplate {
+	dst := make(map[string]*VnpuTemplate, len(src))
+	for k, v := range src {
+		copied := *v
+		dst[k] = &copied
+	}
+	return dst
 }

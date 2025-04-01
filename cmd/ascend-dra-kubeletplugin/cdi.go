@@ -32,26 +32,34 @@ const (
 	cdiCommonDeviceName = "common"
 )
 
+// CDIHandler manages CDI specifications and handles creation/deletion for different CDI use cases.
 type CDIHandler struct {
 	cache *cdiapi.Cache
 }
 
+// NewCDIHandler creates a new CDIHandler with the specified configuration.
 func NewCDIHandler(config *Config) (*CDIHandler, error) {
 	cache, err := cdiapi.NewCache(
 		cdiapi.WithSpecDirs(config.flags.cdiRoot),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("unable to create a new CDI cache: %w", err)
+		return nil, fmt.Errorf("Failed to create CDI cache: %w", err)
 	}
-	handler := &CDIHandler{
-		cache: cache,
-	}
-
-	return handler, nil
+	return &CDIHandler{cache: cache}, nil
 }
 
-// CreateCommonSpecFile 生成通用的 CDI spec，用于设置节点相关环境变量
-func (cdi *CDIHandler) CreateCommonSpecFile() error {
+// writeSpec is a helper function to write a CDI spec with the minimum required version.
+func (h *CDIHandler) writeSpec(spec *cdispec.Spec, specName string) error {
+	minVersion, err := cdiapi.MinimumRequiredVersion(spec)
+	if err != nil {
+		return fmt.Errorf("Failed to get minimum required CDI spec version: %v", err)
+	}
+	spec.Version = minVersion
+	return h.cache.WriteSpec(spec, specName)
+}
+
+// CreateCommonSpecFile generates a common CDI spec that injects node-related environment variables.
+func (h *CDIHandler) CreateCommonSpecFile() error {
 	spec := &cdispec.Spec{
 		Kind: cdiKind,
 		Devices: []cdispec.Device{
@@ -67,60 +75,46 @@ func (cdi *CDIHandler) CreateCommonSpecFile() error {
 		},
 	}
 
-	minVersion, err := cdiapi.MinimumRequiredVersion(spec)
-	if err != nil {
-		return fmt.Errorf("failed to get minimum required CDI spec version: %v", err)
-	}
-	spec.Version = minVersion
-
 	specName, err := cdiapi.GenerateNameForTransientSpec(spec, cdiCommonDeviceName)
 	if err != nil {
-		return fmt.Errorf("failed to generate Spec name: %w", err)
+		return fmt.Errorf("Failed to generate spec name: %w", err)
 	}
-
-	return cdi.cache.WriteSpec(spec, specName)
+	return h.writeSpec(spec, specName)
 }
 
-// CreateClaimSpecFile 为给定 claim 创建临时 CDI spec 文件
-// 修改点：将所有分配到的设备名称聚合后，以环境变量 ASCEND_VISIBLE_DEVICES 注入到 Pod 中
-func (cdi *CDIHandler) CreateClaimSpecFile(claimUID string, devices PreparedDevices) error {
+// CreateClaimSpecFile generates a transient CDI spec file for a given claim,
+// merging multiple container edits into a single device entry.
+func (h *CDIHandler) CreateClaimSpecFile(claimUID string, devices PreparedDevices) error {
+	var merged cdispec.ContainerEdits
+	for _, d := range devices {
+		merged.Env = append(merged.Env, d.ContainerEdits.Env...)
+		merged.DeviceNodes = append(merged.DeviceNodes, d.ContainerEdits.DeviceNodes...)
+		merged.Hooks = append(merged.Hooks, d.ContainerEdits.Hooks...)
+		merged.Mounts = append(merged.Mounts, d.ContainerEdits.Mounts...)
+	}
+
 	spec := &cdispec.Spec{
-		Kind:           cdiKind,
-		Devices:        []cdispec.Device{},
-		ContainerEdits: cdispec.ContainerEdits{},
-	}
-
-	for _, device := range devices {
-		containerEdits := cdispec.ContainerEdits{}
-		containerEdits.Env = append(containerEdits.Env, device.ContainerEdits.Env...)
-		containerEdits.DeviceNodes = append(containerEdits.DeviceNodes, device.ContainerEdits.DeviceNodes...)
-		containerEdits.Hooks = append(containerEdits.Hooks, device.ContainerEdits.Hooks...)
-		containerEdits.Mounts = append(containerEdits.Mounts, device.ContainerEdits.Mounts...)
-		spec.Devices = append(spec.Devices, cdispec.Device{
-			Name:           claimUID,
-			ContainerEdits: containerEdits,
-		})
+		Kind: cdiKind,
+		Devices: []cdispec.Device{
+			{
+				Name:           claimUID,
+				ContainerEdits: merged,
+			},
+		},
 	}
 
 	specName := cdiapi.GenerateTransientSpecName(cdiVendor, cdiClass, claimUID)
-
-	minVersion, err := cdiapi.MinimumRequiredVersion(spec)
-	if err != nil {
-		return fmt.Errorf("failed to get minimum required CDI spec version: %v", err)
-	}
-	spec.Version = minVersion
-
-	return cdi.cache.WriteSpec(spec, specName)
+	return h.writeSpec(spec, specName)
 }
 
-// DeleteClaimSpecFile 删除指定 claim 的 CDI spec 文件
-func (cdi *CDIHandler) DeleteClaimSpecFile(claimUID string) error {
+// DeleteClaimSpecFile removes the transient CDI spec file corresponding to the given claim.
+func (h *CDIHandler) DeleteClaimSpecFile(claimUID string) error {
 	specName := cdiapi.GenerateTransientSpecName(cdiVendor, cdiClass, claimUID)
-	return cdi.cache.RemoveSpec(specName)
+	return h.cache.RemoveSpec(specName)
 }
 
-// GetClaimDevices 返回当前 claim 对应的 CDI 设备名称列表
-func (cdi *CDIHandler) GetClaimDevices(claimUID string, devices []string) []string {
+// GetClaimDevices returns a list of CDI device names for the specified claim.
+func (h *CDIHandler) GetClaimDevices(claimUID string, _ []string) []string {
 	return []string{
 		cdiparser.QualifiedName(cdiVendor, cdiClass, cdiCommonDeviceName),
 		cdiparser.QualifiedName(cdiVendor, cdiClass, claimUID),
