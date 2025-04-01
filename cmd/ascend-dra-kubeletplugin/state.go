@@ -603,6 +603,7 @@ func upsertResourceClaimTemplate(clientset *kubernetes.Clientset, ns, name, expr
 	if err != nil {
 		return err
 	}
+
 	got, getErr := clientset.ResourceV1beta1().ResourceClaimTemplates(ns).Get(
 		context.TODO(), name, metav1.GetOptions{},
 	)
@@ -619,16 +620,25 @@ func upsertResourceClaimTemplate(clientset *kubernetes.Clientset, ns, name, expr
 	if getErr != nil {
 		return fmt.Errorf("failed to get ResourceClaimTemplate: %v", getErr)
 	}
+
 	if !rctEquals(got, want) {
-		want.ObjectMeta.ResourceVersion = got.ObjectMeta.ResourceVersion
-		_, updateErr := clientset.ResourceV1beta1().ResourceClaimTemplates(ns).Update(
-			context.TODO(), want, metav1.UpdateOptions{},
+		delErr := clientset.ResourceV1beta1().ResourceClaimTemplates(ns).Delete(
+			context.TODO(), name, metav1.DeleteOptions{},
 		)
-		if updateErr != nil {
-			return fmt.Errorf("failed to update ResourceClaimTemplate: %v", updateErr)
+		if delErr != nil {
+			return fmt.Errorf("failed to delete ResourceClaimTemplate: %v", delErr)
 		}
-		log.Printf("Successfully updated ResourceClaimTemplate: %s", name)
+		log.Printf("Deleted existing ResourceClaimTemplate: %s", name)
+
+		_, createErr := clientset.ResourceV1beta1().ResourceClaimTemplates(ns).Create(
+			context.TODO(), want, metav1.CreateOptions{},
+		)
+		if createErr != nil {
+			return fmt.Errorf("failed to create ResourceClaimTemplate: %v", createErr)
+		}
+		log.Printf("Successfully created ResourceClaimTemplate: %s", name)
 	}
+
 	return nil
 }
 
