@@ -5,13 +5,13 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: npu-vnpu-system
+  name: npu-vnpu-system1
 
 ---
 apiVersion: resource.k8s.io/v1beta1
 kind: ResourceClaimTemplate
 metadata:
-  namespace: npu-vnpu-system
+  namespace: npu-vnpu-system1
   name: npu-fullcard-template
 spec:
   spec:
@@ -19,20 +19,12 @@ spec:
       requests:
       - name: npu
         deviceClassName: npu-ascend310p.example.com
-      config:
-      - opaque:
-          driver: npu.example.com
-          parameters:
-            apiVersion: gpu.resource.example.com/v1alpha1
-            kind: GpuConfig
-            vnpuSpec:
-              templateName: ""
 
 ---
 apiVersion: v1
 kind: Pod
 metadata:
-  namespace: npu-vnpu-system
+  namespace: npu-vnpu-system1
   name: npu-pod-fullcard
   labels:
     app: npu-pod
