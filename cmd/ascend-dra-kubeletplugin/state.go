@@ -21,7 +21,6 @@ import (
 
 	configapi "Ascend-dra-driver/api/example.com/resource/gpu/v1alpha1"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	cdiapi "tags.cncf.io/container-device-interface/pkg/cdi"
 	cdispec "tags.cncf.io/container-device-interface/specs-go"
@@ -122,8 +121,8 @@ func NewDeviceState(config *Config) (*DeviceState, error) {
 	for _, c := range checkpoints {
 		if c == DriverPluginCheckpointFile {
 			if vnpuManager != nil {
-				if err := CreatePredefinedResourceClaimTemplates(vnpuManager); err != nil {
-					log.Printf("Failed to create predefined ResourceClaimTemplate: %v", err)
+				if err := CreatePredefinedDeviceClasses(vnpuManager); err != nil {
+					log.Printf("Failed to create predefined DeviceClasses: %v", err)
 				}
 			}
 			return state, nil
@@ -136,8 +135,8 @@ func NewDeviceState(config *Config) (*DeviceState, error) {
 	}
 	if vnpuManager != nil {
 		go func() {
-			if err := CreatePredefinedResourceClaimTemplates(vnpuManager); err != nil {
-				log.Printf("Failed to create predefined ResourceClaimTemplate: %v", err)
+			if err := CreatePredefinedDeviceClasses(vnpuManager); err != nil {
+				log.Printf("Failed to create predefined DeviceClasses: %v", err)
 			}
 		}()
 	}
@@ -491,9 +490,9 @@ func (m *VnpuManager) allocateSliceByTemplate(
 	return bestSlice, nil
 }
 
-// CreatePredefinedResourceClaimTemplates idempotently creates/updates ResourceClaimTemplate
-func CreatePredefinedResourceClaimTemplates(vnpuManager *VnpuManager) error {
-	log.Printf("Starting to create predefined ResourceClaimTemplate...")
+// CreatePredefinedDeviceClasses idempotently creates/updates DeviceClasses
+func CreatePredefinedDeviceClasses(vnpuManager *VnpuManager) error {
+	log.Printf("Starting to create predefined DeviceClasses...")
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		return fmt.Errorf("failed to get in-cluster config: %v", err)
@@ -501,10 +500,6 @@ func CreatePredefinedResourceClaimTemplates(vnpuManager *VnpuManager) error {
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		return fmt.Errorf("failed to create Kubernetes client: %v", err)
-	}
-	nsName := "npu-vnpu-system"
-	if err = ensureNamespaceExists(clientset, nsName); err != nil {
-		log.Printf("Failed to create namespace: %v", err)
 	}
 
 	uniqueModels := make(map[string]bool)
@@ -524,126 +519,95 @@ func CreatePredefinedResourceClaimTemplates(vnpuManager *VnpuManager) error {
 		}
 	}
 
-	// Create a full-card template for each unique model
+	// Create a full-card DeviceClass for each unique model
 	for modelName := range uniqueModels {
-		if err := createFullCardRCT(clientset, nsName, modelName); err != nil {
-			log.Printf("Failed to create/update full-card ResourceClaimTemplate: %v", err)
+		if err := createFullCardDeviceClass(clientset, modelName); err != nil {
+			log.Printf("Failed to create/update full-card DeviceClass: %v", err)
 		}
 	}
 
-	// Create the corresponding RCT for each unique template and each unique model
+	// Create the corresponding DeviceClass for each unique template and each unique model
 	for _, tpl := range uniqueTemplates {
 		for modelName := range uniqueModels {
-			if err := createMemoryRCT(clientset, nsName, modelName, tpl); err != nil {
-				log.Printf("Failed to create/update Memory ResourceClaimTemplate: %v", err)
+			if err := createMemoryDeviceClass(clientset, modelName, tpl); err != nil {
+				log.Printf("Failed to create/update Memory DeviceClass: %v", err)
 			}
-			if err := createAicoreRCT(clientset, nsName, modelName, tpl); err != nil {
-				log.Printf("Failed to create/update AICORE ResourceClaimTemplate: %v", err)
+			if err := createAicoreDeviceClass(clientset, modelName, tpl); err != nil {
+				log.Printf("Failed to create/update AICORE DeviceClass: %v", err)
 			}
 		}
 	}
 
-	log.Printf("Predefined ResourceClaimTemplate creation completed")
+	log.Printf("Predefined DeviceClass creation completed")
 	return nil
 }
 
-// ensureNamespaceExists ensures the namespace exists and creates it if not found
-func ensureNamespaceExists(clientset *kubernetes.Clientset, nsName string) error {
-	_, err := clientset.CoreV1().Namespaces().Get(context.TODO(), nsName, metav1.GetOptions{})
-	if err == nil {
-		return nil
-	}
-	if !errors.IsNotFound(err) {
-		return err
-	}
-	_, err = clientset.CoreV1().Namespaces().Create(
-		context.TODO(),
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: nsName}},
-		metav1.CreateOptions{},
-	)
-	return err
-}
-
-// createFullCardRCT creates or updates a “full-card” template
-func createFullCardRCT(clientset *kubernetes.Clientset, nsName, modelName string) error {
+// createFullCardDeviceClass creates or updates a "full-card" DeviceClass
+func createFullCardDeviceClass(clientset *kubernetes.Clientset, modelName string) error {
 	safeModel := toSafeModelName(modelName)
-	rctName := fmt.Sprintf("npu-%s", safeModel)
+	dcName := fmt.Sprintf("npu-%s.example.com", safeModel)
 	expr := fmt.Sprintf(`device.attributes["%s"].model == "%s"`, DriverDomainName, modelName)
-	return upsertResourceClaimTemplate(clientset, nsName, rctName, expr, "")
+	return upsertDeviceClass(clientset, dcName, expr, "")
 }
 
-// createMemoryRCT creates or updates a template based on memory
-func createMemoryRCT(clientset *kubernetes.Clientset, nsName, modelName string, tpl *VnpuTemplate) error {
+// createMemoryDeviceClass creates or updates a DeviceClass based on memory
+func createMemoryDeviceClass(clientset *kubernetes.Clientset, modelName string, tpl *VnpuTemplate) error {
 	safeModel := toSafeModelName(modelName)
-	rctName := fmt.Sprintf("npu-%s-mem%d", safeModel, tpl.Attributes.Memory)
+	dcName := fmt.Sprintf("npu-%s-mem%d.example.com", safeModel, tpl.Attributes.Memory)
 	expr := fmt.Sprintf(`device.attributes["%s"].memory >= %d && device.attributes["%s"].model == "%s"`,
 		DriverDomainName, tpl.Attributes.Memory, DriverDomainName, modelName)
-	return upsertResourceClaimTemplate(clientset, nsName, rctName, expr, tpl.Name)
+	return upsertDeviceClass(clientset, dcName, expr, tpl.Name)
 }
 
-// createAicoreRCT creates or updates a template based on AICORE
-func createAicoreRCT(clientset *kubernetes.Clientset, nsName, modelName string, tpl *VnpuTemplate) error {
+// createAicoreDeviceClass creates or updates a DeviceClass based on AICORE
+func createAicoreDeviceClass(clientset *kubernetes.Clientset, modelName string, tpl *VnpuTemplate) error {
 	safeModel := toSafeModelName(modelName)
-	rctName := fmt.Sprintf("npu-%s-aicore%d", safeModel, tpl.Attributes.AICORE)
+	dcName := fmt.Sprintf("npu-%s-aicore%d.example.com", safeModel, tpl.Attributes.AICORE)
 	expr := fmt.Sprintf(`device.attributes["%s"].aicore >= %d && device.attributes["%s"].model == "%s"`,
 		DriverDomainName, tpl.Attributes.AICORE, DriverDomainName, modelName)
-	return upsertResourceClaimTemplate(clientset, nsName, rctName, expr, tpl.Name)
+	return upsertDeviceClass(clientset, dcName, expr, tpl.Name)
 }
 
-// toSafeModelName removes extra characters from model and converts to lowercase
-func toSafeModelName(model string) string {
-	model = strings.ReplaceAll(model, " ", "-")
-	model = strings.ReplaceAll(model, "/", "-")
-	return strings.ToLower(model)
-}
-
-// upsertResourceClaimTemplate idempotently creates/updates an RCT
-func upsertResourceClaimTemplate(clientset *kubernetes.Clientset, ns, name, expr, tplName string) error {
-	want, err := buildResourceClaimTemplate(ns, name, expr, tplName)
+// upsertDeviceClass idempotently creates/updates a DeviceClass
+func upsertDeviceClass(clientset *kubernetes.Clientset, name, expr, tpl string) error {
+	want, err := buildDeviceClass(name, expr, tpl)
 	if err != nil {
 		return err
 	}
 
-	got, getErr := clientset.ResourceV1beta1().ResourceClaimTemplates(ns).Get(
+	got, getErr := clientset.ResourceV1beta1().DeviceClasses().Get(
 		context.TODO(), name, metav1.GetOptions{},
 	)
 	if errors.IsNotFound(getErr) {
-		_, createErr := clientset.ResourceV1beta1().ResourceClaimTemplates(ns).Create(
+		_, createErr := clientset.ResourceV1beta1().DeviceClasses().Create(
 			context.TODO(), want, metav1.CreateOptions{},
 		)
 		if createErr != nil {
-			return fmt.Errorf("failed to create ResourceClaimTemplate: %v", createErr)
+			return fmt.Errorf("failed to create DeviceClass: %v", createErr)
 		}
-		log.Printf("Successfully created ResourceClaimTemplate: %s", name)
+		log.Printf("Successfully created DeviceClass: %s", name)
 		return nil
 	}
 	if getErr != nil {
-		return fmt.Errorf("failed to get ResourceClaimTemplate: %v", getErr)
+		return fmt.Errorf("failed to get DeviceClass: %v", getErr)
 	}
 
-	if !rctEquals(got, want) {
-		delErr := clientset.ResourceV1beta1().ResourceClaimTemplates(ns).Delete(
-			context.TODO(), name, metav1.DeleteOptions{},
+	if !deviceClassEquals(got, want) {
+		want.ObjectMeta.ResourceVersion = got.ObjectMeta.ResourceVersion
+		_, updateErr := clientset.ResourceV1beta1().DeviceClasses().Update(
+			context.TODO(), want, metav1.UpdateOptions{},
 		)
-		if delErr != nil {
-			return fmt.Errorf("failed to delete ResourceClaimTemplate: %v", delErr)
+		if updateErr != nil {
+			return fmt.Errorf("failed to update DeviceClass: %v", updateErr)
 		}
-		log.Printf("Deleted existing ResourceClaimTemplate: %s", name)
-
-		_, createErr := clientset.ResourceV1beta1().ResourceClaimTemplates(ns).Create(
-			context.TODO(), want, metav1.CreateOptions{},
-		)
-		if createErr != nil {
-			return fmt.Errorf("failed to create ResourceClaimTemplate: %v", createErr)
-		}
-		log.Printf("Successfully created ResourceClaimTemplate: %s", name)
+		log.Printf("Successfully updated DeviceClass: %s", name)
 	}
 
 	return nil
 }
 
-// buildResourceClaimTemplate generates the target ResourceClaimTemplate
-func buildResourceClaimTemplate(ns, name, celExpression, tplName string) (*resourceapi.ResourceClaimTemplate, error) {
+// buildDeviceClass generates the target DeviceClass
+func buildDeviceClass(name, celExpression, tplName string) (*resourceapi.DeviceClass, error) {
 	paramObj := map[string]interface{}{
 		"apiVersion": "gpu.resource.example.com/v1alpha1",
 		"kind":       "GpuConfig",
@@ -655,40 +619,40 @@ func buildResourceClaimTemplate(ns, name, celExpression, tplName string) (*resou
 	if err != nil {
 		return nil, err
 	}
-	return &resourceapi.ResourceClaimTemplate{
+	return &resourceapi.DeviceClass{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: ns,
+			Name: name,
 		},
-		Spec: resourceapi.ResourceClaimTemplateSpec{
-			Spec: resourceapi.ResourceClaimSpec{
-				Devices: resourceapi.DeviceClaim{
-					Requests: []resourceapi.DeviceRequest{{
-						Name:            "npu",
-						DeviceClassName: "npu.example.com",
-						Selectors: []resourceapi.DeviceSelector{{
-							CEL: &resourceapi.CELDeviceSelector{Expression: celExpression},
-						}},
-					}},
-					Config: []resourceapi.DeviceClaimConfiguration{{
-						DeviceConfiguration: resourceapi.DeviceConfiguration{
-							Opaque: &resourceapi.OpaqueDeviceConfiguration{
-								Driver: DriverName,
-								Parameters: runtime.RawExtension{
-									Raw: raw,
-								},
+		Spec: resourceapi.DeviceClassSpec{
+			Selectors: []resourceapi.DeviceSelector{{
+				CEL: &resourceapi.CELDeviceSelector{Expression: celExpression},
+			}},
+			Config: []resourceapi.DeviceClassConfiguration{
+				{
+					DeviceConfiguration: resourceapi.DeviceConfiguration{
+						Opaque: &resourceapi.OpaqueDeviceConfiguration{
+							Driver: DriverName,
+							Parameters: runtime.RawExtension{
+								Raw: raw,
 							},
 						},
-					}},
+					},
 				},
 			},
 		},
 	}, nil
 }
 
-// rctEquals performs a simple comparison of the Spec fields
-func rctEquals(a, b *resourceapi.ResourceClaimTemplate) bool {
+// deviceClassEquals performs a simple comparison of the Spec fields
+func deviceClassEquals(a, b *resourceapi.DeviceClass) bool {
 	aSpec, _ := json.Marshal(a.Spec)
 	bSpec, _ := json.Marshal(b.Spec)
 	return string(aSpec) == string(bSpec)
+}
+
+// toSafeModelName removes extra characters from model and converts to lowercase
+func toSafeModelName(model string) string {
+	model = strings.ReplaceAll(model, " ", "-")
+	model = strings.ReplaceAll(model, "/", "-")
+	return strings.ToLower(model)
 }
