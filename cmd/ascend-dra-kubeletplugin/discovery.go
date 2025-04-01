@@ -32,6 +32,76 @@ import (
 	"github.com/google/uuid"
 )
 
+// fetchAiCore attempts to retrieve the total number of AI Cores on the card.
+// If it fails, it returns a fallback value according to the device type.
+func fetchAiCore(hdm *server.HwDevManager, devType string) (int, error) {
+	aiCoreCount, err := hdm.GetChipAiCoreCount()
+	if err == nil {
+		return int(aiCoreCount), nil
+	}
+	if strings.Contains(devType, "Ascend910") {
+		return 32, err
+	} else if strings.Contains(devType, "Ascend310P") {
+		return 16, err
+	}
+	return 0, err
+}
+
+// fetchMemory attempts to retrieve total memory from the card.
+// If it fails, it returns a fallback value according to the device type.
+func fetchMemory(hdm *server.HwDevManager, devType string) (int, error) {
+	memSize, err := hdm.GetChipMem()
+	if err == nil {
+		return int(memSize), nil
+	}
+	if strings.Contains(devType, "Ascend910") {
+		return 32, err
+	} else if strings.Contains(devType, "Ascend310P") {
+		return 16, err
+	}
+	return 0, err
+}
+
+// getDeviceResources returns the maximum AI Core and memory for a device
+// depending on whether it has been split into vNPUs or not.
+func getDeviceResources(hdm *server.HwDevManager, devType string, vnpuManager *VnpuManager, deviceName string) (int, int) {
+	if vnpuManager == nil {
+		return 0, 0
+	}
+	physicalNpu := vnpuManager.PhysicalNpus[deviceName]
+	if physicalNpu == nil {
+		return 0, 0
+	}
+
+	// If the device has not been split yet, return the full card resources
+	if len(physicalNpu.AllocatedSlices) == 0 {
+		aiCores, errCore := fetchAiCore(hdm, devType)
+		if errCore != nil {
+			log.Printf("Failed to fetch AI Core count: %v", errCore)
+		}
+		mem, errMem := fetchMemory(hdm, devType)
+		if errMem != nil {
+			log.Printf("Failed to fetch memory size: %v", errMem)
+		}
+		return aiCores, mem
+	}
+
+	// If the device has already been split, find the largest remaining
+	// AI Core and memory values from the available templates
+	maxAicore, maxMemory := 0, 0
+	for _, tpl := range physicalNpu.SupportTemplates {
+		if tpl.Attributes.AICORE > maxAicore {
+			maxAicore = tpl.Attributes.AICORE
+		}
+		if tpl.Attributes.Memory > maxMemory {
+			maxMemory = tpl.Attributes.Memory
+		}
+	}
+	return maxAicore, maxMemory
+}
+
+// enumerateAllPossibleDevices initializes the devmanager, creates a vNPU manager if possible,
+// and enumerates all possible devices to produce an AllocatableDevices map.
 func enumerateAllPossibleDevices() (AllocatableDevices, *VnpuManager, error) {
 	devM, err := devmanager.AutoInit("")
 	if err != nil {
@@ -40,102 +110,27 @@ func enumerateAllPossibleDevices() (AllocatableDevices, *VnpuManager, error) {
 	hdm := server.NewHwDevManager(devM)
 	allInfo := hdm.AllInfo
 
-	// 初始化vNPU管理器
 	vnpuManager, err := NewVnpuManager()
 	if err != nil {
-		log.Printf("初始化vNPU管理器失败: %v，将只支持整卡分配", err)
-		// 即使初始化失败，仍然继续，只不过不支持vNPU分配
+		log.Printf("Failed to initialize vNPU manager: %v. Only full-card allocation is supported.", err)
 	}
 
 	alldevices := make(AllocatableDevices)
-	// 遍历所有设备，根据实际硬件信息构造 resourceapi.Device 对象
 	for _, dev := range allInfo.AllDevs {
-		// 使用 dev.LogicID 作为设备索引，设备名称格式为 "npu-<LogicID>"
 		deviceName := fmt.Sprintf("npu-%d", dev.LogicID)
-		// 生成设备唯一标识（例如使用 NODE_NAME 和设备ID 拼接）
 		uuidStr := fmt.Sprintf("%s-%d", os.Getenv("NODE_NAME"), dev.LogicID)
 
-		// 构建基本设备属性
 		devAttributes := map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 			DriverDomain + "index": {IntValue: ptr.To(int64(dev.LogicID))},
 			DriverDomain + "uuid":  {StringValue: ptr.To(uuidStr)},
 			DriverDomain + "model": {StringValue: ptr.To(dev.DevType)},
 		}
 
-		// 添加vNPU模板信息作为设备属性
 		if vnpuManager != nil {
-			// 初始化物理NPU
 			vnpuManager.InitPhysicalNpu(deviceName, dev.LogicID, dev.DevType)
-
-			// 添加支持的vNPU模板属性
-			physicalNpu := vnpuManager.PhysicalNpus[deviceName]
-			if physicalNpu != nil {
-				// 找出当前支持的最大算力属性
-				maxAicore := 0
-				maxMemory := 0
-
-				// 检查NPU是否已被拆分
-				isAlreadySplit := len(physicalNpu.AllocatedSlices) > 0
-
-				if !isAlreadySplit {
-					// 如果NPU未被拆分，应该使用整卡的物理资源值
-					// 使用底层函数直接获取整卡资源值
-					// 获取整卡AI Core数量
-					aiCoreCount, err := hdm.GetChipAiCoreCount()
-					if err == nil {
-						maxAicore = int(aiCoreCount)
-					} else {
-						log.Printf("获取整卡AI Core数量失败: %v，使用默认值", err)
-						// 回退到之前的方法，使用预定义值
-						if strings.Contains(dev.DevType, "Ascend910") {
-							maxAicore = 32
-						} else if strings.Contains(dev.DevType, "Ascend310P") {
-							maxAicore = 16
-						}
-					}
-
-					// 获取整卡内存大小
-					memSize, err := hdm.GetChipMem()
-					if err == nil {
-						maxMemory = int(memSize)
-					} else {
-						log.Printf("获取整卡内存大小失败: %v，使用默认值", err)
-						// 回退到之前的方法，使用预定义值
-						if strings.Contains(dev.DevType, "Ascend910") {
-							maxMemory = 32
-						} else if strings.Contains(dev.DevType, "Ascend310P") {
-							maxMemory = 16
-						}
-					}
-				} else {
-					// 如果NPU已被拆分，计算后续最大可用模板的算力值
-					// 只考虑剩余可用的模板（即经过updateSupportTemplates更新后的模板）
-					availableTemplates := physicalNpu.SupportTemplates
-					if len(availableTemplates) > 0 {
-						// 从剩余可用的模板中找出最大算力
-						for _, template := range availableTemplates {
-							if template.Attributes.AICORE > maxAicore {
-								maxAicore = template.Attributes.AICORE
-							}
-							if template.Attributes.Memory > maxMemory {
-								maxMemory = template.Attributes.Memory
-							}
-						}
-					} else {
-						// 如果没有可用模板，则表示无法再分配，将值设为0
-						maxAicore = 0
-						maxMemory = 0
-					}
-				}
-
-				// 将最大算力属性作为设备属性
-				devAttributes[DriverDomain+"aicore"] = resourceapi.DeviceAttribute{
-					IntValue: ptr.To(int64(maxAicore)),
-				}
-				devAttributes[DriverDomain+"memory"] = resourceapi.DeviceAttribute{
-					IntValue: ptr.To(int64(maxMemory)),
-				}
-			}
+			maxAicore, maxMemory := getDeviceResources(hdm, dev.DevType, vnpuManager, deviceName)
+			devAttributes[DriverDomain+"aicore"] = resourceapi.DeviceAttribute{IntValue: ptr.To(int64(maxAicore))}
+			devAttributes[DriverDomain+"memory"] = resourceapi.DeviceAttribute{IntValue: ptr.To(int64(maxMemory))}
 		}
 
 		device := resourceapi.Device{
@@ -145,12 +140,12 @@ func enumerateAllPossibleDevices() (AllocatableDevices, *VnpuManager, error) {
 			},
 		}
 		alldevices[device.Name] = device
-
-		log.Printf("发现NPU设备: %s, 型号: %s", deviceName, dev.DevType)
+		log.Printf("Discovered NPU device: %s, Model: %s", deviceName, dev.DevType)
 	}
 	return alldevices, vnpuManager, nil
 }
 
+// contains checks if a string slice contains the target item.
 func contains(slice []string, item string) bool {
 	for _, v := range slice {
 		if v == item {
@@ -160,22 +155,22 @@ func contains(slice []string, item string) bool {
 	return false
 }
 
+// generateUUIDs generates a list of UUID strings based on a seed string.
 func generateUUIDs(seed string, count int) []string {
-	rand := rand.New(rand.NewSource(hash(seed)))
-
+	rng := rand.New(rand.NewSource(hash(seed)))
 	uuids := make([]string, count)
 	for i := 0; i < count; i++ {
 		charset := make([]byte, 16)
-		rand.Read(charset)
-		uuid, _ := uuid.FromBytes(charset)
-		uuids[i] = "npu-" + uuid.String()
+		rng.Read(charset)
+		u, _ := uuid.FromBytes(charset)
+		uuids[i] = "npu-" + u.String()
 	}
-
 	return uuids
 }
 
+// hash implements a simple hash function for a string, returning an int64.
 func hash(s string) int64 {
-	h := int64(0)
+	var h int64
 	for _, c := range s {
 		h = 31*h + int64(c)
 	}
