@@ -91,7 +91,7 @@ func (pds PreparedDevices) GetDevices() []*drapbv1.Device {
 	return ds
 }
 
-// NewDeviceState 初始化并返回 DeviceState
+// NewDeviceState initializes and returns a DeviceState
 func NewDeviceState(config *Config) (*DeviceState, error) {
 	allocatable, vnpuManager, err := enumerateAllPossibleDevices()
 	if err != nil {
@@ -123,7 +123,7 @@ func NewDeviceState(config *Config) (*DeviceState, error) {
 		if c == DriverPluginCheckpointFile {
 			if vnpuManager != nil {
 				if err := CreatePredefinedResourceClaimTemplates(vnpuManager); err != nil {
-					log.Printf("创建预定义ResourceClaimTemplate失败: %v", err)
+					log.Printf("Failed to create predefined ResourceClaimTemplate: %v", err)
 				}
 			}
 			return state, nil
@@ -137,14 +137,14 @@ func NewDeviceState(config *Config) (*DeviceState, error) {
 	if vnpuManager != nil {
 		go func() {
 			if err := CreatePredefinedResourceClaimTemplates(vnpuManager); err != nil {
-				log.Printf("创建预定义ResourceClaimTemplate失败: %v", err)
+				log.Printf("Failed to create predefined ResourceClaimTemplate: %v", err)
 			}
 		}()
 	}
 	return state, nil
 }
 
-// Prepare 完成设备的准备操作
+// Prepare completes device preparation
 func (s *DeviceState) Prepare(claim *resourceapi.ResourceClaim) ([]*drapbv1.Device, error) {
 	s.Lock()
 	defer s.Unlock()
@@ -175,7 +175,7 @@ func (s *DeviceState) Prepare(claim *resourceapi.ResourceClaim) ([]*drapbv1.Devi
 	return pd.GetDevices(), nil
 }
 
-// Unprepare 回收设备的准备操作
+// Unprepare reclaims device resources
 func (s *DeviceState) Unprepare(claimUID string) error {
 	s.Lock()
 	defer s.Unlock()
@@ -202,7 +202,7 @@ func (s *DeviceState) Unprepare(claimUID string) error {
 	return nil
 }
 
-// prepareDevices 根据Claim分配或获取对应Device
+// prepareDevices allocates or retrieves the corresponding Device based on the Claim
 func (s *DeviceState) prepareDevices(claim *resourceapi.ResourceClaim) (PreparedDevices, error) {
 	if claim.Status.Allocation == nil {
 		return nil, fmt.Errorf("claim not yet allocated")
@@ -212,7 +212,7 @@ func (s *DeviceState) prepareDevices(claim *resourceapi.ResourceClaim) (Prepared
 		return nil, fmt.Errorf("error getting opaque device configs: %v", err)
 	}
 
-	// 默认配置插入到最前
+	// Insert default config at the beginning
 	configs = slices.Insert(configs, 0, &OpaqueDeviceConfig{
 		Requests: []string{},
 		Config:   configapi.DefaultGpuConfig(),
@@ -223,17 +223,17 @@ func (s *DeviceState) prepareDevices(claim *resourceapi.ResourceClaim) (Prepared
 	for _, result := range claim.Status.Allocation.Devices.Results {
 		origDevice := result.Device
 
-		// 如果有vnpuManager，先尝试分配vNPU分片
+		// If vnpuManager is available, try to allocate vNPU slices first
 		if s.vnpuManager != nil {
 			if err := s.allocateVnpuSlice(&result, configs, origDevice); err != nil {
-				log.Printf("警告: 分配vNPU分片失败: %v，尝试使用整卡分配", err)
+				log.Printf("Warning: failed to allocate vNPU slice: %v, attempting to use full card allocation", err)
 			}
 		}
 
 		if _, ok := s.allocatable[origDevice]; !ok {
 			return nil, fmt.Errorf("requested NPU is not allocatable: %v", origDevice)
 		}
-		// 找到匹配的配置
+		// Find matching config
 		for _, c := range slices.Backward(configs) {
 			if len(c.Requests) == 0 || slices.Contains(c.Requests, result.Request) {
 				configResultsMap[c.Config] = append(configResultsMap[c.Config], &result)
@@ -281,7 +281,7 @@ func (s *DeviceState) prepareDevices(claim *resourceapi.ResourceClaim) (Prepared
 	return preparedDevices, nil
 }
 
-// allocateVnpuSlice 根据用户需求尝试分配vNPU分片
+// allocateVnpuSlice tries to allocate a vNPU slice based on user requirements
 func (s *DeviceState) allocateVnpuSlice(
 	result *resourceapi.DeviceRequestAllocationResult,
 	configs []*OpaqueDeviceConfig,
@@ -296,7 +296,7 @@ func (s *DeviceState) allocateVnpuSlice(
 				if tpl, found := s.vnpuManager.Templates[templateName]; found {
 					requestedAicore = tpl.Attributes.AICORE
 					requestedMemory = tpl.Attributes.Memory
-					log.Printf("从模板 %s 获取资源需求: AICORE=%d, Memory=%dGB",
+					log.Printf("Obtained resource requirements from template %s: AICORE=%d, Memory=%dGB",
 						templateName, requestedAicore, requestedMemory)
 					break
 				}
@@ -308,28 +308,28 @@ func (s *DeviceState) allocateVnpuSlice(
 		return err
 	}
 	result.Device = slice.SliceID
-	log.Printf("成功为设备 %s 分配vNPU分片: %s (模板: %s, AICORE: %d, Memory: %dGB)",
+	log.Printf("Successfully allocated vNPU slice for device %s: %s (template: %s, AICORE: %d, Memory: %dGB)",
 		origDevice, slice.SliceID, templateName, requestedAicore, requestedMemory)
 	return nil
 }
 
-// unprepareDevices 回收指定 ClaimUID 下的设备
+// unprepareDevices reclaims devices under the specified ClaimUID
 func (s *DeviceState) unprepareDevices(claimUID string, devices PreparedDevices) error {
-	log.Printf("开始释放设备，claimUID: %s", claimUID)
+	log.Printf("Starting to release devices, claimUID: %s", claimUID)
 	if s.vnpuManager == nil {
 		return nil
 	}
 	for _, dev := range devices {
 		if err := s.vnpuManager.ReleaseSlice(dev.Device.DeviceName); err != nil {
-			log.Printf("警告: 释放vNPU分片 %s 失败: %v", dev.Device.DeviceName, err)
+			log.Printf("Warning: failed to release vNPU slice %s: %v", dev.Device.DeviceName, err)
 		} else {
-			log.Printf("成功释放vNPU分片: %s", dev.Device.DeviceName)
+			log.Printf("Successfully released vNPU slice: %s", dev.Device.DeviceName)
 		}
 	}
 	return nil
 }
 
-// applyConfig 为每个设备设置相应的环境变量
+// applyConfig sets corresponding environment variables for each device
 func (s *DeviceState) applyConfig(
 	config *configapi.GpuConfig,
 	results []*resourceapi.DeviceRequestAllocationResult,
@@ -347,14 +347,14 @@ func (s *DeviceState) applyConfig(
 	return perDeviceEdits, nil
 }
 
-// buildBaseEnv 构建基础环境变量，如 ASCEND_VISIBLE_DEVICES
+// buildBaseEnv constructs basic environment variables such as ASCEND_VISIBLE_DEVICES
 func buildBaseEnv(deviceName string) []string {
 	return []string{
 		fmt.Sprintf("ASCEND_VISIBLE_DEVICES=%s", deviceName[4:5]),
 	}
 }
 
-// addVnpuEnvIfSlice 如果是分片格式 npu-x-y，增加 ASCEND_VNPU_SPECS
+// addVnpuEnvIfSlice adds ASCEND_VNPU_SPECS if it is a slice format npu-x-y
 func (s *DeviceState) addVnpuEnvIfSlice(envs []string, deviceID string) []string {
 	r := regexp.MustCompile(`^npu-(\d+)-(\d+)$`)
 	if !r.MatchString(deviceID) {
@@ -362,17 +362,17 @@ func (s *DeviceState) addVnpuEnvIfSlice(envs []string, deviceID string) []string
 	}
 	vnpuSpec, err := s.vnpuManager.GetVnpuSpecsEnv(deviceID)
 	if err != nil {
-		log.Printf("警告: 获取vNPU规格失败: %v", err)
+		log.Printf("Warning: failed to get vNPU specs: %v", err)
 		return envs
 	}
 	if vnpuSpec != "" {
 		envs = append(envs, fmt.Sprintf("ASCEND_VNPU_SPECS=%s", vnpuSpec))
-		log.Printf("为设备 %s 设置vNPU规格: %s", deviceID, vnpuSpec)
+		log.Printf("Set vNPU specs for device %s: %s", deviceID, vnpuSpec)
 	}
 	return envs
 }
 
-// addSharingStrategyEnv 为设备添加共享策略的环境变量
+// addSharingStrategyEnv adds environment variables for the sharing strategy
 func addSharingStrategyEnv(envs []string, config *configapi.GpuConfig, deviceName string) []string {
 	if config.Sharing == nil {
 		return envs
@@ -393,7 +393,7 @@ func addSharingStrategyEnv(envs []string, config *configapi.GpuConfig, deviceNam
 	return envs
 }
 
-// GetOpaqueDeviceConfigs 筛选并解析Opaque配置
+// GetOpaqueDeviceConfigs filters and decodes opaque configurations
 func GetOpaqueDeviceConfigs(
 	decoder runtime.Decoder,
 	driverName string,
@@ -431,14 +431,14 @@ func GetOpaqueDeviceConfigs(
 	return result, nil
 }
 
-// AllocateSlice 根据算力需求分配vNPU分片
+// AllocateSlice allocates a vNPU slice based on the requested computational resources
 func (m *VnpuManager) AllocateSlice(deviceName string, requestedAicore, requestedMemory int) (*VnpuSlice, error) {
 	m.Lock()
 	defer m.Unlock()
-	log.Printf("尝试分配vNPU切片，设备: %s, 需求: AICORE=%d, Memory=%dGB", deviceName, requestedAicore, requestedMemory)
+	log.Printf("Attempting to allocate vNPU slice, device: %s, requirements: AICORE=%d, Memory=%dGB", deviceName, requestedAicore, requestedMemory)
 	physicalNpu, ok := m.PhysicalNpus[deviceName]
 	if !ok {
-		return nil, fmt.Errorf("找不到物理NPU设备: %s", deviceName)
+		return nil, fmt.Errorf("physical NPU not found: %s", deviceName)
 	}
 	if requestedAicore == 0 && requestedMemory == 0 {
 		return m.allocateFullCard(physicalNpu, deviceName)
@@ -446,21 +446,21 @@ func (m *VnpuManager) AllocateSlice(deviceName string, requestedAicore, requeste
 	return m.allocateSliceByTemplate(physicalNpu, deviceName, requestedAicore, requestedMemory)
 }
 
-// 分配整卡
+// allocateFullCard allocates the entire card
 func (m *VnpuManager) allocateFullCard(npu *PhysicalNpuState, deviceName string) (*VnpuSlice, error) {
 	for i, slice := range npu.AvailableSlices {
 		if slice.SliceID == deviceName && !slice.Allocated {
 			slice.Allocated = true
 			npu.AllocatedSlices = append(npu.AllocatedSlices, slice)
 			npu.AvailableSlices = append(npu.AvailableSlices[:i], npu.AvailableSlices[i+1:]...)
-			log.Printf("成功分配物理NPU %s 的整卡", deviceName)
+			log.Printf("Successfully allocated the full physical NPU %s", deviceName)
 			return slice, nil
 		}
 	}
-	return nil, fmt.Errorf("物理NPU %s 的整卡已被分配", deviceName)
+	return nil, fmt.Errorf("the full card for Physical NPU %s has already been allocated", deviceName)
 }
 
-// 根据模板属性分配vNPU分片
+// allocateSliceByTemplate allocates a vNPU slice based on template attributes
 func (m *VnpuManager) allocateSliceByTemplate(
 	npu *PhysicalNpuState,
 	deviceName string,
@@ -483,28 +483,28 @@ func (m *VnpuManager) allocateSliceByTemplate(
 		}
 	}
 	if bestSlice == nil {
-		return nil, fmt.Errorf("找不到满足需求的切分方案: AICORE>=%d, Memory>=%dGB", requestedAicore, requestedMemory)
+		return nil, fmt.Errorf("no partition scheme found that meets the requirements: AICORE>=%d, Memory>=%dGB", requestedAicore, requestedMemory)
 	}
 	npu.AllocatedSlices = append(npu.AllocatedSlices, bestSlice)
-	log.Printf("成功分配vNPU分片: %s (AICORE: %d, Memory: %dGB)",
+	log.Printf("Successfully allocated vNPU slice: %s (AICORE: %d, Memory: %dGB)",
 		bestSlice.SliceID, requestedAicore, requestedMemory)
 	return bestSlice, nil
 }
 
-// CreatePredefinedResourceClaimTemplates 幂等创建/更新 ResourceClaimTemplate
+// CreatePredefinedResourceClaimTemplates idempotently creates/updates ResourceClaimTemplate
 func CreatePredefinedResourceClaimTemplates(vnpuManager *VnpuManager) error {
-	log.Printf("开始创建预定义的ResourceClaimTemplate...")
+	log.Printf("Starting to create predefined ResourceClaimTemplate...")
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		return fmt.Errorf("获取集群内配置失败: %v", err)
+		return fmt.Errorf("failed to get in-cluster config: %v", err)
 	}
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		return fmt.Errorf("创建Kubernetes客户端失败: %v", err)
+		return fmt.Errorf("failed to create Kubernetes client: %v", err)
 	}
 	nsName := "npu-vnpu-system"
 	if err = ensureNamespaceExists(clientset, nsName); err != nil {
-		log.Printf("创建命名空间失败: %v", err)
+		log.Printf("Failed to create namespace: %v", err)
 	}
 
 	uniqueModels := make(map[string]bool)
@@ -524,30 +524,30 @@ func CreatePredefinedResourceClaimTemplates(vnpuManager *VnpuManager) error {
 		}
 	}
 
-	// 为每个唯一型号创建整卡模板
+	// Create a full-card template for each unique model
 	for modelName := range uniqueModels {
 		if err := createFullCardRCT(clientset, nsName, modelName); err != nil {
-			log.Printf("创建/更新整卡ResourceClaimTemplate失败: %v", err)
+			log.Printf("Failed to create/update full-card ResourceClaimTemplate: %v", err)
 		}
 	}
 
-	// 为每个唯一模板 + 每个唯一型号 创建对应RCT
+	// Create the corresponding RCT for each unique template and each unique model
 	for _, tpl := range uniqueTemplates {
 		for modelName := range uniqueModels {
 			if err := createMemoryRCT(clientset, nsName, modelName, tpl); err != nil {
-				log.Printf("创建/更新Memory ResourceClaimTemplate失败: %v", err)
+				log.Printf("Failed to create/update Memory ResourceClaimTemplate: %v", err)
 			}
 			if err := createAicoreRCT(clientset, nsName, modelName, tpl); err != nil {
-				log.Printf("创建/更新AICORE ResourceClaimTemplate失败: %v", err)
+				log.Printf("Failed to create/update AICORE ResourceClaimTemplate: %v", err)
 			}
 		}
 	}
 
-	log.Printf("预定义ResourceClaimTemplate创建完成")
+	log.Printf("Predefined ResourceClaimTemplate creation completed")
 	return nil
 }
 
-// ensureNamespaceExists 确保命名空间存在，不存在则创建
+// ensureNamespaceExists ensures the namespace exists and creates it if not found
 func ensureNamespaceExists(clientset *kubernetes.Clientset, nsName string) error {
 	_, err := clientset.CoreV1().Namespaces().Get(context.TODO(), nsName, metav1.GetOptions{})
 	if err == nil {
@@ -564,7 +564,7 @@ func ensureNamespaceExists(clientset *kubernetes.Clientset, nsName string) error
 	return err
 }
 
-// createFullCardRCT 创建或更新“整卡”模板
+// createFullCardRCT creates or updates a “full-card” template
 func createFullCardRCT(clientset *kubernetes.Clientset, nsName, modelName string) error {
 	safeModel := toSafeModelName(modelName)
 	rctName := fmt.Sprintf("npu-%s", safeModel)
@@ -572,7 +572,7 @@ func createFullCardRCT(clientset *kubernetes.Clientset, nsName, modelName string
 	return upsertResourceClaimTemplate(clientset, nsName, rctName, expr, "")
 }
 
-// createMemoryRCT 按 Memory 创建或更新模板
+// createMemoryRCT creates or updates a template based on memory
 func createMemoryRCT(clientset *kubernetes.Clientset, nsName, modelName string, tpl *VnpuTemplate) error {
 	safeModel := toSafeModelName(modelName)
 	rctName := fmt.Sprintf("npu-%s-mem%d", safeModel, tpl.Attributes.Memory)
@@ -581,7 +581,7 @@ func createMemoryRCT(clientset *kubernetes.Clientset, nsName, modelName string, 
 	return upsertResourceClaimTemplate(clientset, nsName, rctName, expr, tpl.Name)
 }
 
-// createAicoreRCT 按 AICORE 创建或更新模板
+// createAicoreRCT creates or updates a template based on AICORE
 func createAicoreRCT(clientset *kubernetes.Clientset, nsName, modelName string, tpl *VnpuTemplate) error {
 	safeModel := toSafeModelName(modelName)
 	rctName := fmt.Sprintf("npu-%s-aicore%d", safeModel, tpl.Attributes.AICORE)
@@ -590,14 +590,14 @@ func createAicoreRCT(clientset *kubernetes.Clientset, nsName, modelName string, 
 	return upsertResourceClaimTemplate(clientset, nsName, rctName, expr, tpl.Name)
 }
 
-// toSafeModelName 去掉型号中多余字符，转换为小写
+// toSafeModelName removes extra characters from model and converts to lowercase
 func toSafeModelName(model string) string {
 	model = strings.ReplaceAll(model, " ", "-")
 	model = strings.ReplaceAll(model, "/", "-")
 	return strings.ToLower(model)
 }
 
-// upsertResourceClaimTemplate 幂等创建/更新 RCT
+// upsertResourceClaimTemplate idempotently creates/updates an RCT
 func upsertResourceClaimTemplate(clientset *kubernetes.Clientset, ns, name, expr, tplName string) error {
 	want, err := buildResourceClaimTemplate(ns, name, expr, tplName)
 	if err != nil {
@@ -611,13 +611,13 @@ func upsertResourceClaimTemplate(clientset *kubernetes.Clientset, ns, name, expr
 			context.TODO(), want, metav1.CreateOptions{},
 		)
 		if createErr != nil {
-			return fmt.Errorf("创建ResourceClaimTemplate失败: %v", createErr)
+			return fmt.Errorf("failed to create ResourceClaimTemplate: %v", createErr)
 		}
-		log.Printf("成功创建ResourceClaimTemplate: %s", name)
+		log.Printf("Successfully created ResourceClaimTemplate: %s", name)
 		return nil
 	}
 	if getErr != nil {
-		return fmt.Errorf("获取ResourceClaimTemplate失败: %v", getErr)
+		return fmt.Errorf("failed to get ResourceClaimTemplate: %v", getErr)
 	}
 	if !rctEquals(got, want) {
 		want.ObjectMeta.ResourceVersion = got.ObjectMeta.ResourceVersion
@@ -625,14 +625,14 @@ func upsertResourceClaimTemplate(clientset *kubernetes.Clientset, ns, name, expr
 			context.TODO(), want, metav1.UpdateOptions{},
 		)
 		if updateErr != nil {
-			return fmt.Errorf("更新ResourceClaimTemplate失败: %v", updateErr)
+			return fmt.Errorf("failed to update ResourceClaimTemplate: %v", updateErr)
 		}
-		log.Printf("成功更新ResourceClaimTemplate: %s", name)
+		log.Printf("Successfully updated ResourceClaimTemplate: %s", name)
 	}
 	return nil
 }
 
-// buildResourceClaimTemplate 生成目标ResourceClaimTemplate
+// buildResourceClaimTemplate generates the target ResourceClaimTemplate
 func buildResourceClaimTemplate(ns, name, celExpression, tplName string) (*resourceapi.ResourceClaimTemplate, error) {
 	paramObj := map[string]interface{}{
 		"apiVersion": "gpu.resource.example.com/v1alpha1",
@@ -676,7 +676,7 @@ func buildResourceClaimTemplate(ns, name, celExpression, tplName string) (*resou
 	}, nil
 }
 
-// rctEquals 简单对比 Spec 是否一致（可根据需求调整）
+// rctEquals performs a simple comparison of the Spec fields
 func rctEquals(a, b *resourceapi.ResourceClaimTemplate) bool {
 	aSpec, _ := json.Marshal(a.Spec)
 	bSpec, _ := json.Marshal(b.Spec)
