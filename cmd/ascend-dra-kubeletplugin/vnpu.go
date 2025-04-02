@@ -137,23 +137,26 @@ func (m *VnpuManager) InitPhysicalNpu(deviceName string, logicID int32, modelNam
 		return
 	}
 
+	// 从deviceName (npu-x-0)中提取物理设备ID
 	physicalDeviceID := fmt.Sprintf("npu-%d", logicID)
 
 	npu := &PhysicalNpuState{
 		DeviceName:       deviceName,
-		PhysicalDeviceID: physicalDeviceID,
+		PhysicalDeviceID: physicalDeviceID, // 存储物理设备ID
 		LogicID:          logicID,
 		ModelName:        modelName,
 		AvailableSlices:  []*VnpuSlice{},
 		AllocatedSlices:  []*VnpuSlice{},
 		SupportTemplates: cloneTemplates(m.Templates),
-		NextSliceIndex:   1,
+		NextSliceIndex:   1, // 下一个可用的分片索引，初始为1，因为0已经用于初始状态
 	}
-
+	
+	// 初始可用分片为当前设备名称，类型为NPU表示整卡
 	npu.AvailableSlices = append(npu.AvailableSlices, &VnpuSlice{
 		SliceID:      deviceName,
 		TemplateName: "",
 		Allocated:    false,
+		Type:         "NPU", // 整卡类型
 	})
 	m.PhysicalNpus[deviceName] = npu
 

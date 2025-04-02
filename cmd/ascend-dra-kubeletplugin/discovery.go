@@ -124,6 +124,7 @@ func enumerateAllPossibleDevices() (AllocatableDevices, *VnpuManager, error) {
 			DriverDomain + "index": {IntValue: ptr.To(int64(dev.LogicID))},
 			DriverDomain + "uuid":  {StringValue: ptr.To(uuidStr)},
 			DriverDomain + "model": {StringValue: ptr.To(dev.DevType)},
+			DriverDomain + "type":  {StringValue: ptr.To("NPU")},
 		}
 
 		if vnpuManager != nil {
@@ -140,7 +141,7 @@ func enumerateAllPossibleDevices() (AllocatableDevices, *VnpuManager, error) {
 			},
 		}
 		alldevices[device.Name] = device
-		log.Printf("Discovered NPU device: %s, Model: %s", deviceName, dev.DevType)
+		log.Printf("Discovered NPU device: %s, Type: NPU, Model: %s", deviceName, dev.DevType)
 	}
 	return alldevices, vnpuManager, nil
 }
