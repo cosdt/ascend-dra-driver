@@ -88,13 +88,11 @@ func (d *driver) NodePrepareResources(ctx context.Context, req *drapbv1.NodePrep
 
 	// 所有资源处理完毕后，上报最新的资源状态
 	var resources kubeletplugin.Resources
-	
+
 	// 上报所有可用的slice
-	for _, deviceName := range d.getAvailableDeviceNames() {
-		if device, ok := d.state.allocatable[deviceName]; ok {
-			resources.Devices = append(resources.Devices, device)
-			klog.V(4).Infof("Publishing available device: %s", deviceName)
-		}
+	for _, deviceName := range d.state.allocatable {
+		resources.Devices = append(resources.Devices, deviceName)
+		klog.V(4).Infof("Publishing available device: %s", deviceName)
 	}
 
 	if err := d.plugin.PublishResources(ctx, resources); err != nil {
@@ -109,7 +107,7 @@ func (d *driver) NodePrepareResources(ctx context.Context, req *drapbv1.NodePrep
 // getAvailableDeviceNames 返回当前所有可用设备的名称
 func (d *driver) getAvailableDeviceNames() []string {
 	var deviceNames []string
-	
+
 	if d.state.vnpuManager != nil {
 		// 从VnpuManager获取所有可用slice
 		for _, physicalNpu := range d.state.vnpuManager.PhysicalNpus {
@@ -125,7 +123,7 @@ func (d *driver) getAvailableDeviceNames() []string {
 			deviceNames = append(deviceNames, deviceName)
 		}
 	}
-	
+
 	return deviceNames
 }
 
