@@ -171,27 +171,65 @@ func (m *VnpuManager) ReleaseSlice(sliceID string) error {
 		return err
 	}
 
+	// 从已分配列表中移除
 	pnpu.AllocatedSlices = append(pnpu.AllocatedSlices[:idx], pnpu.AllocatedSlices[idx+1:]...)
 	slice.Allocated = false
 
-	// If this is the entire card, simply restore it as available.
-	if slice.SliceID == pnpu.DeviceName {
-		pnpu.AvailableSlices = append(pnpu.AvailableSlices, slice)
-		log.Printf("Successfully released the entire card for NPU %s.", pnpu.DeviceName)
-		return nil
-	}
-
-	// If all slices are now released, restore the entire card as available.
-	if len(pnpu.AllocatedSlices) == 0 && !m.wholeCardIsAvailable(pnpu) {
+	// 如果是释放整卡(NPU类型)
+	if slice.Type == "NPU" {
+		// 清空所有已分配和可用的分片
+		pnpu.AllocatedSlices = []*VnpuSlice{}
+		pnpu.AvailableSlices = []*VnpuSlice{}
+		// 重置NextSliceIndex
+		pnpu.NextSliceIndex = 1
+		// 恢复整卡为可用状态
 		pnpu.AvailableSlices = append(pnpu.AvailableSlices, &VnpuSlice{
 			SliceID:      pnpu.DeviceName,
 			TemplateName: "",
 			Allocated:    false,
+			Type:         "NPU",
 		})
+		log.Printf("Successfully released the entire NPU card %s, restored to initial state", pnpu.DeviceName)
+		return nil
 	}
 
+	// 如果是释放vNPU分片
+	// 检查是否所有分片都已释放
+	if len(pnpu.AllocatedSlices) == 0 {
+		// 所有分片都已释放，恢复为整卡状态
+		pnpu.AvailableSlices = []*VnpuSlice{}
+		pnpu.NextSliceIndex = 1
+		pnpu.AvailableSlices = append(pnpu.AvailableSlices, &VnpuSlice{
+			SliceID:      pnpu.DeviceName,
+			TemplateName: "",
+			Allocated:    false,
+			Type:         "NPU",
+		})
+		log.Printf("All vNPU slices released for device %s, restored to full card state", pnpu.DeviceName)
+	} else {
+		// 还有其他分片在使用，更新可用分片列表
+		// 移除所有旧的可用分片
+		pnpu.AvailableSlices = []*VnpuSlice{}
+		// 创建新的可用分片
+		newSliceID := fmt.Sprintf("npu-%d-%d", pnpu.LogicID, pnpu.NextSliceIndex)
+		newSlice := &VnpuSlice{
+			SliceID:      newSliceID,
+			TemplateName: "",
+			Allocated:    false,
+			Type:         "vNPU",
+		}
+		pnpu.AvailableSlices = append(pnpu.AvailableSlices, newSlice)
+		pnpu.NextSliceIndex++
+
+		// 通知设备更新
+		if m.deviceUpdateCallback != nil {
+			m.deviceUpdateCallback(newSliceID, pnpu)
+		}
+		log.Printf("Released vNPU slice %s, created new available slice %s", sliceID, newSliceID)
+	}
+
+	// 更新支持的模板
 	m.updateSupportTemplates(pnpu)
-	log.Printf("Successfully released VNPU slice %s.", sliceID)
 	return nil
 }
 
