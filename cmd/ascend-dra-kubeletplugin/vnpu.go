@@ -270,6 +270,22 @@ func (m *VnpuManager) wholeCardIsAvailable(npu *PhysicalNpuState) bool {
 	return false
 }
 
+func (d *driver) getAvailableDeviceNames() []string {
+	var deviceNames []string
+	if d.state.vnpuManager != nil {
+		for _, physicalNpu := range d.state.vnpuManager.PhysicalNpus {
+			for _, slice := range physicalNpu.AvailableSlices {
+				deviceNames = append(deviceNames, slice.SliceID)
+			}
+			for _, slice := range physicalNpu.AllocatedSlices {
+				deviceNames = append(deviceNames, slice.SliceID)
+			}
+		}
+	}
+
+	return deviceNames
+}
+
 // updateSupportTemplates updates the set of templates supported by the physical NPU.
 func (m *VnpuManager) updateSupportTemplates(npu *PhysicalNpuState) {
 	// If no slices are allocated, support all templates.
