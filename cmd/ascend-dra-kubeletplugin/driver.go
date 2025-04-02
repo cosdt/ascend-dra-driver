@@ -96,10 +96,6 @@ func (d *driver) NodePrepareResources(ctx context.Context, req *drapbv1.NodePrep
 				}
 			}
 		}
-	} else {
-		for _, device := range d.state.allocatable {
-			resources.Devices = append(resources.Devices, device)
-		}
 	}
 
 	if err := d.plugin.PublishResources(ctx, resources); err != nil {
