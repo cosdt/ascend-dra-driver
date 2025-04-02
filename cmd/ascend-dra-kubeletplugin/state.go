@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"os"
 	"regexp"
 	"slices"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"k8s.io/client-go/rest"
 	drapbv1 "k8s.io/kubelet/pkg/apis/dra/v1beta1"
 	"k8s.io/kubernetes/pkg/kubelet/checkpointmanager"
+	"k8s.io/utils/ptr"
 
 	configapi "Ascend-dra-driver/api/example.com/resource/gpu/v1alpha1"
 
@@ -65,10 +67,21 @@ type PhysicalNpuState struct {
 	NextSliceIndex   int
 }
 
+// DeviceUpdateCallback 是设备更新回调函数的类型定义
+type DeviceUpdateCallback func(deviceName string, physicalNpu *PhysicalNpuState)
+
 type VnpuManager struct {
 	sync.Mutex
-	PhysicalNpus map[string]*PhysicalNpuState
-	Templates    map[string]*VnpuTemplate
+	PhysicalNpus         map[string]*PhysicalNpuState
+	Templates            map[string]*VnpuTemplate
+	deviceUpdateCallback DeviceUpdateCallback
+}
+
+// SetDeviceUpdateCallback 设置设备更新回调函数
+func (m *VnpuManager) SetDeviceUpdateCallback(callback DeviceUpdateCallback) {
+	m.Lock()
+	defer m.Unlock()
+	m.deviceUpdateCallback = callback
 }
 
 type PreparedDevice struct {
@@ -114,6 +127,15 @@ func NewDeviceState(config *Config) (*DeviceState, error) {
 		allocatable:       allocatable,
 		checkpointManager: checkpointManager,
 		vnpuManager:       vnpuManager,
+	}
+
+	// 设置VnpuManager的设备更新回调
+	if vnpuManager != nil {
+		vnpuManager.SetDeviceUpdateCallback(func(deviceName string, physicalNpu *PhysicalNpuState) {
+			if added := state.UpdateAllocatableDevice(deviceName, physicalNpu); added {
+				log.Printf("Added new device %s to allocatable devices", deviceName)
+			}
+		})
 	}
 
 	checkpoints, err := state.checkpointManager.ListCheckpoints()
@@ -467,7 +489,8 @@ func (m *VnpuManager) allocateSliceByTemplate(
 	deviceName string,
 	requestedAicore, requestedMemory int,
 ) (*VnpuSlice, error) {
-	var bestSlice *VnpuSlice
+	// 首先找到合适的模板
+	var bestTemplate *VnpuTemplate
 	bestDiff := math.MaxInt32
 	for _, template := range npu.SupportTemplates {
 		if template.Attributes.AICORE >= requestedAicore &&
@@ -475,33 +498,62 @@ func (m *VnpuManager) allocateSliceByTemplate(
 			diff := (template.Attributes.AICORE - requestedAicore) + (template.Attributes.Memory - requestedMemory)
 			if diff < bestDiff {
 				bestDiff = diff
-				newSliceID := fmt.Sprintf("npu-%d-%d", npu.LogicID, npu.NextSliceIndex)
-				bestSlice = &VnpuSlice{
-					SliceID:      newSliceID,
-					TemplateName: template.Name,
-					Allocated:    true,
-				}
+				bestTemplate = template
 			}
 		}
 	}
-	if bestSlice == nil {
+	if bestTemplate == nil {
 		return nil, fmt.Errorf("no partition scheme found that meets the requirements: AICORE>=%d, Memory>=%dGB", requestedAicore, requestedMemory)
 	}
-
+	
+	// 找到当前可用的slice(通常是npu-x-0)
+	var currentSlice *VnpuSlice
+	var sliceIndex int
 	for i, slice := range npu.AvailableSlices {
-		if slice.SliceID == deviceName {
-			npu.AvailableSlices = append(npu.AvailableSlices[:i], npu.AvailableSlices[i+1:]...)
+		if slice.SliceID == deviceName && !slice.Allocated {
+			currentSlice = slice
+			sliceIndex = i
 			break
 		}
 	}
-
-	npu.AllocatedSlices = append(npu.AllocatedSlices, bestSlice)
-
+	
+	if currentSlice == nil {
+		return nil, fmt.Errorf("cannot find available slice %s", deviceName)
+	}
+	
+	// 将当前slice从可用列表中移除
+	npu.AvailableSlices = append(npu.AvailableSlices[:sliceIndex], npu.AvailableSlices[sliceIndex+1:]...)
+	
+	// 设置当前slice的模板属性并标记为已分配
+	currentSlice.TemplateName = bestTemplate.Name
+	currentSlice.Allocated = true
+	
+	// 添加到已分配列表
+	npu.AllocatedSlices = append(npu.AllocatedSlices, currentSlice)
+	
+	// 如果物理设备还有剩余资源，创建一个新的slice代表剩余资源
+	// 这里可以根据实际需求和硬件特性实现资源计算
+	// 简单实现：每次分片后都创建一个新的可用片代表剩余资源
+	newSliceID := fmt.Sprintf("npu-%d-%d", npu.LogicID, npu.NextSliceIndex)
+	newSlice := &VnpuSlice{
+		SliceID:      newSliceID,
+		TemplateName: "",
+		Allocated:    false,
+	}
+	npu.AvailableSlices = append(npu.AvailableSlices, newSlice)
+	
+	// 将新slice注册到设备管理器的回调中，以便在prepare阶段结束后更新allocatable
+	if m.deviceUpdateCallback != nil {
+		m.deviceUpdateCallback(newSliceID, npu)
+	}
+	
 	npu.NextSliceIndex++
-
-	log.Printf("Successfully allocated vNPU slice: %s (AICORE: %d, Memory: %dGB)",
-		bestSlice.SliceID, requestedAicore, requestedMemory)
-	return bestSlice, nil
+	
+	log.Printf("Successfully allocated vNPU slice: %s with template %s (AICORE: %d, Memory: %dGB)",
+		currentSlice.SliceID, bestTemplate.Name, bestTemplate.Attributes.AICORE, bestTemplate.Attributes.Memory)
+	log.Printf("Created new available slice: %s representing remaining resources", newSliceID)
+	
+	return currentSlice, nil
 }
 
 // CreatePredefinedDeviceClasses idempotently creates/updates DeviceClasses
@@ -669,4 +721,55 @@ func toSafeModelName(model string) string {
 	model = strings.ReplaceAll(model, " ", "-")
 	model = strings.ReplaceAll(model, "/", "-")
 	return strings.ToLower(model)
+}
+
+// UpdateAllocatableDevice 添加或更新allocatable中的设备信息
+func (s *DeviceState) UpdateAllocatableDevice(deviceName string, physicalNpu *PhysicalNpuState) bool {
+	s.Lock()
+	defer s.Unlock()
+	
+	// 检查设备是否已存在
+	_, exists := s.allocatable[deviceName]
+	if exists {
+		// 设备已存在，不需要更新
+		return false
+	}
+	
+	// 创建一个新的Device对象
+	uuidStr := fmt.Sprintf("%s-%d", os.Getenv("NODE_NAME"), physicalNpu.LogicID)
+	
+	devAttributes := map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
+		DriverDomain + "index": {IntValue: ptr.To(int64(physicalNpu.LogicID))},
+		DriverDomain + "uuid":  {StringValue: ptr.To(uuidStr)},
+		DriverDomain + "model": {StringValue: ptr.To(physicalNpu.ModelName)},
+	}
+	
+	// 如果有vnpuManager，添加AICORE和Memory属性
+	if s.vnpuManager != nil {
+		// 计算剩余资源或使用模板资源值
+		// 这里简化处理，使用预定义模板中最大的资源值
+		maxAicore, maxMemory := 0, 0
+		for _, tpl := range physicalNpu.SupportTemplates {
+			if tpl.Attributes.AICORE > maxAicore {
+				maxAicore = tpl.Attributes.AICORE
+			}
+			if tpl.Attributes.Memory > maxMemory {
+				maxMemory = tpl.Attributes.Memory
+			}
+		}
+		
+		devAttributes[DriverDomain+"aicore"] = resourceapi.DeviceAttribute{IntValue: ptr.To(int64(maxAicore))}
+		devAttributes[DriverDomain+"memory"] = resourceapi.DeviceAttribute{IntValue: ptr.To(int64(maxMemory))}
+	}
+	
+	device := resourceapi.Device{
+		Name: deviceName,
+		Basic: &resourceapi.BasicDevice{
+			Attributes: devAttributes,
+		},
+	}
+	
+	s.allocatable[deviceName] = device
+	log.Printf("Added new allocatable NPU device: %s, Model: %s", deviceName, physicalNpu.ModelName)
+	return true
 }
