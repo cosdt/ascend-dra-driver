@@ -86,11 +86,7 @@ func (d *driver) NodePrepareResources(ctx context.Context, req *drapbv1.NodePrep
 		preparedResources.Claims[claim.UID] = d.nodePrepareResource(ctx, claim)
 	}
 
-	for _, deviceName := range d.getAvailableDeviceNames() {
-		if _, ok := d.state.allocatable[deviceName]; !ok {
-			delete(d.state.allocatable, deviceName)
-		}
-	}
+	d.syncAllocatable()
 
 	var resources kubeletplugin.Resources
 	for _, deviceName := range d.state.allocatable {
@@ -136,12 +132,8 @@ func (d *driver) NodeUnprepareResources(ctx context.Context, req *drapbv1.NodeUn
 		unpreparedResources.Claims[claim.UID] = d.nodeUnprepareResource(ctx, claim)
 	}
 
-	for _, deviceName := range d.getAvailableDeviceNames() {
-		if _, ok := d.state.allocatable[deviceName]; !ok {
-			delete(d.state.allocatable, deviceName)
-		}
-	}
-	
+	d.syncAllocatable()
+
 	var resources kubeletplugin.Resources
 	for _, device := range d.state.allocatable {
 		resources.Devices = append(resources.Devices, device)
