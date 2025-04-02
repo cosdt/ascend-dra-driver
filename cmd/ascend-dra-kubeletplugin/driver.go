@@ -86,10 +86,20 @@ func (d *driver) NodePrepareResources(ctx context.Context, req *drapbv1.NodePrep
 		preparedResources.Claims[claim.UID] = d.nodePrepareResource(ctx, claim)
 	}
 
-	// 所有资源处理完毕后，上报最新的资源状态
 	var resources kubeletplugin.Resources
-	for _, device := range d.state.allocatable {
-		resources.Devices = append(resources.Devices, device)
+
+	if d.state.vnpuManager != nil {
+		for _, physicalNpu := range d.state.vnpuManager.PhysicalNpus {
+			for _, slice := range physicalNpu.AvailableSlices {
+				if device, ok := d.state.allocatable[slice.SliceID]; ok {
+					resources.Devices = append(resources.Devices, device)
+				}
+			}
+		}
+	} else {
+		for _, device := range d.state.allocatable {
+			resources.Devices = append(resources.Devices, device)
+		}
 	}
 
 	if err := d.plugin.PublishResources(ctx, resources); err != nil {
@@ -131,7 +141,6 @@ func (d *driver) NodeUnprepareResources(ctx context.Context, req *drapbv1.NodeUn
 		unpreparedResources.Claims[claim.UID] = d.nodeUnprepareResource(ctx, claim)
 	}
 
-	// 所有资源处理完毕后，上报最新的资源状态
 	var resources kubeletplugin.Resources
 	for _, device := range d.state.allocatable {
 		resources.Devices = append(resources.Devices, device)

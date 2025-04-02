@@ -137,14 +137,19 @@ func (m *VnpuManager) InitPhysicalNpu(deviceName string, logicID int32, modelNam
 		return
 	}
 
+	physicalDeviceID := fmt.Sprintf("npu-%d", logicID)
+
 	npu := &PhysicalNpuState{
 		DeviceName:       deviceName,
+		PhysicalDeviceID: physicalDeviceID,
 		LogicID:          logicID,
 		ModelName:        modelName,
 		AvailableSlices:  []*VnpuSlice{},
 		AllocatedSlices:  []*VnpuSlice{},
 		SupportTemplates: cloneTemplates(m.Templates),
+		NextSliceIndex:   1,
 	}
+
 	npu.AvailableSlices = append(npu.AvailableSlices, &VnpuSlice{
 		SliceID:      deviceName,
 		TemplateName: "",

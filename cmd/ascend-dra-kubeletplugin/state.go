@@ -56,11 +56,13 @@ type VnpuSlice struct {
 
 type PhysicalNpuState struct {
 	DeviceName       string
+	PhysicalDeviceID string
 	LogicID          int32
 	ModelName        string
 	AvailableSlices  []*VnpuSlice
 	AllocatedSlices  []*VnpuSlice
 	SupportTemplates map[string]*VnpuTemplate
+	NextSliceIndex   int
 }
 
 type VnpuManager struct {
@@ -452,11 +454,11 @@ func (m *VnpuManager) allocateFullCard(npu *PhysicalNpuState, deviceName string)
 			slice.Allocated = true
 			npu.AllocatedSlices = append(npu.AllocatedSlices, slice)
 			npu.AvailableSlices = append(npu.AvailableSlices[:i], npu.AvailableSlices[i+1:]...)
-			log.Printf("Successfully allocated the full physical NPU %s", deviceName)
+			log.Printf("Successfully allocated the full physical NPU slice %s", deviceName)
 			return slice, nil
 		}
 	}
-	return nil, fmt.Errorf("the full card for Physical NPU %s has already been allocated", deviceName)
+	return nil, fmt.Errorf("the slice %s has already been allocated", deviceName)
 }
 
 // allocateSliceByTemplate allocates a vNPU slice based on template attributes
@@ -473,8 +475,9 @@ func (m *VnpuManager) allocateSliceByTemplate(
 			diff := (template.Attributes.AICORE - requestedAicore) + (template.Attributes.Memory - requestedMemory)
 			if diff < bestDiff {
 				bestDiff = diff
+				newSliceID := fmt.Sprintf("npu-%d-%d", npu.LogicID, npu.NextSliceIndex)
 				bestSlice = &VnpuSlice{
-					SliceID:      fmt.Sprintf("%s-%d", deviceName, len(npu.AllocatedSlices)+1),
+					SliceID:      newSliceID,
 					TemplateName: template.Name,
 					Allocated:    true,
 				}
@@ -484,7 +487,18 @@ func (m *VnpuManager) allocateSliceByTemplate(
 	if bestSlice == nil {
 		return nil, fmt.Errorf("no partition scheme found that meets the requirements: AICORE>=%d, Memory>=%dGB", requestedAicore, requestedMemory)
 	}
+
+	for i, slice := range npu.AvailableSlices {
+		if slice.SliceID == deviceName {
+			npu.AvailableSlices = append(npu.AvailableSlices[:i], npu.AvailableSlices[i+1:]...)
+			break
+		}
+	}
+
 	npu.AllocatedSlices = append(npu.AllocatedSlices, bestSlice)
+
+	npu.NextSliceIndex++
+
 	log.Printf("Successfully allocated vNPU slice: %s (AICORE: %d, Memory: %dGB)",
 		bestSlice.SliceID, requestedAicore, requestedMemory)
 	return bestSlice, nil

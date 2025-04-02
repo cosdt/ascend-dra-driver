@@ -117,7 +117,7 @@ func enumerateAllPossibleDevices() (AllocatableDevices, *VnpuManager, error) {
 
 	alldevices := make(AllocatableDevices)
 	for _, dev := range allInfo.AllDevs {
-		deviceName := fmt.Sprintf("npu-%d", dev.LogicID)
+		deviceName := fmt.Sprintf("npu-%d-0", dev.LogicID)
 		uuidStr := fmt.Sprintf("%s-%d", os.Getenv("NODE_NAME"), dev.LogicID)
 
 		devAttributes := map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
