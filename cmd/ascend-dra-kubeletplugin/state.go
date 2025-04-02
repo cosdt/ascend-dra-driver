@@ -623,8 +623,8 @@ func createFullCardDeviceClass(clientset *kubernetes.Clientset, modelName string
 func createMemoryDeviceClass(clientset *kubernetes.Clientset, modelName string, tpl *VnpuTemplate) error {
 	safeModel := toSafeModelName(modelName)
 	dcName := fmt.Sprintf("npu-%s-mem%d.example.com", safeModel, tpl.Attributes.Memory)
-	expr := fmt.Sprintf(`device.attributes["%s"].memory >= %d && device.attributes["%s"].model == "%s" && device.attributes["%s"].type == "vNPU"`,
-		DriverDomainName, tpl.Attributes.Memory, DriverDomainName, modelName, DriverDomainName)
+	expr := fmt.Sprintf(`device.attributes["%s"].memory >= %d && device.attributes["%s"].model == "%s"`,
+		DriverDomainName, tpl.Attributes.Memory, DriverDomainName, modelName)
 	return upsertDeviceClass(clientset, dcName, expr, tpl.Name)
 }
 
@@ -632,8 +632,8 @@ func createMemoryDeviceClass(clientset *kubernetes.Clientset, modelName string, 
 func createAicoreDeviceClass(clientset *kubernetes.Clientset, modelName string, tpl *VnpuTemplate) error {
 	safeModel := toSafeModelName(modelName)
 	dcName := fmt.Sprintf("npu-%s-aicore%d.example.com", safeModel, tpl.Attributes.AICORE)
-	expr := fmt.Sprintf(`device.attributes["%s"].aicore >= %d && device.attributes["%s"].model == "%s" && device.attributes["%s"].type == "vNPU"`,
-		DriverDomainName, tpl.Attributes.AICORE, DriverDomainName, modelName, DriverDomainName)
+	expr := fmt.Sprintf(`device.attributes["%s"].aicore >= %d && device.attributes["%s"].model == "%s"`,
+		DriverDomainName, tpl.Attributes.AICORE, DriverDomainName, modelName)
 	return upsertDeviceClass(clientset, dcName, expr, tpl.Name)
 }
 
