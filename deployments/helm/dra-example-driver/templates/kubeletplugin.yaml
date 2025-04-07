@@ -39,12 +39,14 @@ spec:
           {{- toYaml .Values.kubeletPlugin.containers.plugin.securityContext | nindent 10 }}
         image: {{ include "dra-example-driver.fullimage" . }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
-        command: ["dra-example-kubeletplugin"]
+        command: ["sleep", "infinity"]
         resources:
           {{- toYaml .Values.kubeletPlugin.containers.plugin.resources | nindent 10 }}
         env:
         - name: CDI_ROOT
           value: /var/run/cdi
+        - name: LD_LIBRARY_PATH
+          value: /usr/local/Ascend/driver/lib64:/usr/local/Ascend/driver/lib64/driver:/usr/local/Ascend/driver/lib64/common
         - name: NODE_NAME
           valueFrom:
             fieldRef:
@@ -63,6 +65,19 @@ spec:
           mountPath: /var/lib/kubelet/plugins
         - name: cdi
           mountPath: /var/run/cdi
+        - name: device-plugin
+          mountPath: /var/lib/kubelet/device-plugins
+        - name: pod-resource
+          mountPath: /var/lib/kubelet/pod-resources
+        - name: hiai-driver
+          mountPath: /usr/local/Ascend
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+        # 添加NPU模板信息文件挂载
+        - name: npu-template-info
+          mountPath: /etc/npu
+          readOnly: true
       volumes:
       - name: plugins-registry
         hostPath:
@@ -73,6 +88,23 @@ spec:
       - name: cdi
         hostPath:
           path: /var/run/cdi
+      - name: device-plugin
+        hostPath:
+          path: /var/lib/kubelet/device-plugins
+      - name: pod-resource
+        hostPath:
+          path: /var/lib/kubelet/pod-resources
+      - name: hiai-driver
+        hostPath:
+          path: /usr/local/Ascend
+      - name: tmp
+        hostPath:
+          path: /tmp
+      # 添加NPU模板信息文件存放目录
+      - name: npu-template-info
+        hostPath:
+          path: /etc/npu
+          type: DirectoryOrCreate
       {{- with .Values.kubeletPlugin.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

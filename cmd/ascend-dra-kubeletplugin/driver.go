@@ -79,11 +79,24 @@ func (d *driver) Shutdown(ctx context.Context) error {
 }
 
 func (d *driver) NodePrepareResources(ctx context.Context, req *drapbv1.NodePrepareResourcesRequest) (*drapbv1.NodePrepareResourcesResponse, error) {
-	klog.Infof("NodePrepareResource is called: number of claims: %d", len(req.Claims))
+	klog.Infof("NodePrepareResources called: number of claims: %d", len(req.Claims))
 	preparedResources := &drapbv1.NodePrepareResourcesResponse{Claims: map[string]*drapbv1.NodePrepareResourceResponse{}}
 
 	for _, claim := range req.Claims {
 		preparedResources.Claims[claim.UID] = d.nodePrepareResource(ctx, claim)
+	}
+
+	d.syncAllocatable()
+
+	var resources kubeletplugin.Resources
+	for _, deviceName := range d.state.allocatable {
+		resources.Devices = append(resources.Devices, deviceName)
+	}
+
+	if err := d.plugin.PublishResources(ctx, resources); err != nil {
+		klog.Errorf("Failed to publish resources after preparing claims: %v", err)
+	} else {
+		klog.Infof("Successfully published updated resources after preparing %d claims", len(req.Claims))
 	}
 
 	return preparedResources, nil
@@ -112,11 +125,24 @@ func (d *driver) nodePrepareResource(ctx context.Context, claim *drapbv1.Claim) 
 }
 
 func (d *driver) NodeUnprepareResources(ctx context.Context, req *drapbv1.NodeUnprepareResourcesRequest) (*drapbv1.NodeUnprepareResourcesResponse, error) {
-	klog.Infof("NodeUnPrepareResource is called: number of claims: %d", len(req.Claims))
+	klog.Infof("NodeUnprepareResources called: number of claims: %d", len(req.Claims))
 	unpreparedResources := &drapbv1.NodeUnprepareResourcesResponse{Claims: map[string]*drapbv1.NodeUnprepareResourceResponse{}}
 
 	for _, claim := range req.Claims {
 		unpreparedResources.Claims[claim.UID] = d.nodeUnprepareResource(ctx, claim)
+	}
+
+	d.syncAllocatable()
+
+	var resources kubeletplugin.Resources
+	for _, device := range d.state.allocatable {
+		resources.Devices = append(resources.Devices, device)
+	}
+
+	if err := d.plugin.PublishResources(ctx, resources); err != nil {
+		klog.Errorf("Failed to publish resources after unpreparing claims: %v", err)
+	} else {
+		klog.Infof("Successfully published updated resources after unpreparing %d claims", len(req.Claims))
 	}
 
 	return unpreparedResources, nil

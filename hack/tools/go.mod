@@ -1,4 +1,4 @@
-module sigs.k8s.io/dra-example-driver/hack/tools
+module Ascend-dra-driver/hack/tools
 
 go 1.21.0
 

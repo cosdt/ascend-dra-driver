@@ -1,9 +1,2 @@
----
-apiVersion: resource.k8s.io/v1beta1
-kind: DeviceClass
-metadata:
-  name: gpu.example.com
-spec:
-  selectors:
-  - cel: 
-      expression: "device.driver == 'gpu.example.com'"
+# 注意：默认 deviceclass 已经由代码中的 CreatePredefinedDeviceClasses 函数自动创建
+# 此文件不再需要静态定义 DeviceClass

@@ -42,6 +42,13 @@ var Decoder runtime.Decoder
 type GpuConfig struct {
 	metav1.TypeMeta `json:",inline"`
 	Sharing         *GpuSharing `json:"sharing,omitempty"`
+	VnpuSpec        *VnpuSpec   `json:"vnpuSpec,omitempty"`
+}
+
+// VnpuSpec 定义了vNPU虚拟化的规格
+type VnpuSpec struct {
+	// 指定需要使用的vNPU模板名称
+	TemplateName string `json:"templateName,omitempty"`
 }
 
 // DefaultGpuConfig provides the default GPU configuration.

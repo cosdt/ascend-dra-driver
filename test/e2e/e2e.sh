@@ -18,341 +18,341 @@
 
 set -e
 
-kind get clusters
+minikube status
 kubectl get nodes
-kubectl wait --for=condition=Ready nodes/dra-example-driver-cluster-worker --timeout=120s
-kubectl create -f demo/gpu-test1.yaml
-kubectl create -f demo/gpu-test2.yaml
-kubectl create -f demo/gpu-test3.yaml
-kubectl create -f demo/gpu-test4.yaml
-kubectl create -f demo/gpu-test5.yaml
+kubectl wait --for=condition=Ready nodes/minikube --timeout=120s
+kubectl create -f demo/npu-test1.yaml
+kubectl create -f demo/npu-test2.yaml
+kubectl create -f demo/npu-test3.yaml
+kubectl create -f demo/npu-test4.yaml
+kubectl create -f demo/npu-test5.yaml
 
-function gpus-from-logs {
+function npus-from-logs {
   local logs="$1"
-  echo "$logs" | sed -nE "s/^declare -x GPU_DEVICE_[[:digit:]]+=\"(.+)\"$/\1/p"
+  echo "$logs" | sed -nE "s/^declare -x NPU_DEVICE_[[:digit:]]+=\"(.+)\"$/\1/p"
 }
 
-function gpu-id {
-  local gpu="$1"
-  echo "$gpu" | sed -nE "s/^gpu-([[:digit:]]+)$/\1/p"
+function npu-id {
+  local npu="$1"
+  echo "$npu" | sed -nE "s/^npu-([[:digit:]]+)$/\1/p"
 }
 
-function gpu-sharing-strategy-from-logs {
-  local logs="$1"
-  local id="$2"
-  echo "$logs" | sed -nE "s/^declare -x GPU_DEVICE_${id}_SHARING_STRATEGY=\"(.+)\"$/\1/p"
-}
-
-function gpu-timeslice-interval-from-logs {
+function npu-sharing-strategy-from-logs {
   local logs="$1"
   local id="$2"
-  echo "$logs" | sed -nE "s/^declare -x GPU_DEVICE_${id}_TIMESLICE_INTERVAL=\"(.+)\"$/\1/p"
+  echo "$logs" | sed -nE "s/^declare -x NPU_DEVICE_${id}_SHARING_STRATEGY=\"(.+)\"$/\1/p"
 }
 
-function gpu-partition-count-from-logs {
+function npu-timeslice-interval-from-logs {
   local logs="$1"
   local id="$2"
-  echo "$logs" | sed -nE "s/^declare -x GPU_DEVICE_${id}_PARTITION_COUNT=\"(.+)\"$/\1/p"
+  echo "$logs" | sed -nE "s/^declare -x NPU_DEVICE_${id}_TIMESLICE_INTERVAL=\"(.+)\"$/\1/p"
 }
 
-declare -a observed_gpus
-function gpu-already-seen {
-  local gpu="$1"
-  for seen in "${observed_gpus[@]}"; do
-    if [[ "$gpu" == "$seen" ]]; then return 0; fi;
+function npu-partition-count-from-logs {
+  local logs="$1"
+  local id="$2"
+  echo "$logs" | sed -nE "s/^declare -x NPU_DEVICE_${id}_PARTITION_COUNT=\"(.+)\"$/\1/p"
+}
+
+declare -a observed_npus
+function npu-already-seen {
+  local npu="$1"
+  for seen in "${observed_npus[@]}"; do
+    if [[ "$npu" == "$seen" ]]; then return 0; fi;
   done
   return 1
 }
 
-kubectl wait --for=condition=Ready -n gpu-test1 pod/pod0 --timeout=120s
-kubectl wait --for=condition=Ready -n gpu-test1 pod/pod1 --timeout=120s
-gpu_test_1=$(kubectl get pods -n gpu-test1 | grep -c 'Running')
-if [ $gpu_test_1 != 2 ]; then
-    echo "gpu_test_1 $gpu_test_1 failed to match against 2 expected pods"
+kubectl wait --for=condition=Ready -n npu-test1 pod/pod0 --timeout=120s
+kubectl wait --for=condition=Ready -n npu-test1 pod/pod1 --timeout=120s
+npu_test_1=$(kubectl get pods -n npu-test1 | grep -c 'Running')
+if [ $npu_test_1 != 2 ]; then
+    echo "npu_test_1 $npu_test_1 failed to match against 2 expected pods"
     exit 1
 fi
 
-gpu_test1_pod0_ctr0_logs=$(kubectl logs -n gpu-test1 pod0 -c ctr0)
-gpu_test1_pod0_ctr0_gpus=$(gpus-from-logs "$gpu_test1_pod0_ctr0_logs")
-gpu_test1_pod0_ctr0_gpus_count=$(echo "$gpu_test1_pod0_ctr0_gpus" | wc -w)
-if [[ $gpu_test1_pod0_ctr0_gpus_count != 1 ]]; then
-  echo "Expected Pod gpu-test1/pod0, container ctr0 to have 1 GPU, but got $gpu_test1_pod0_ctr0_gpus_count: $gpu_test1_pod0_ctr0_gpus"
+npu_test1_pod0_ctr0_logs=$(kubectl logs -n npu-test1 pod0 -c ctr0)
+npu_test1_pod0_ctr0_npus=$(npus-from-logs "$npu_test1_pod0_ctr0_logs")
+npu_test1_pod0_ctr0_npus_count=$(echo "$npu_test1_pod0_ctr0_npus" | wc -w)
+if [[ $npu_test1_pod0_ctr0_npus_count != 1 ]]; then
+  echo "Expected Pod npu-test1/pod0, container ctr0 to have 1 NPU, but got $npu_test1_pod0_ctr0_npus_count: $npu_test1_pod0_ctr0_npus"
   exit 1
 fi
-gpu_test1_pod0_ctr0_gpu="$gpu_test1_pod0_ctr0_gpus"
-if gpu-already-seen "$gpu_test1_pod0_ctr0_gpu"; then
-  echo "Pod gpu-test1/pod0, container ctr0 should have a new GPU but claimed $gpu_test1_pod0_ctr0_gpu which is already claimed"
+npu_test1_pod0_ctr0_npu="$npu_test1_pod0_ctr0_npus"
+if npu-already-seen "$npu_test1_pod0_ctr0_npu"; then
+  echo "Pod npu-test1/pod0, container ctr0 should have a new NPU but claimed $npu_test1_pod0_ctr0_npu which is already claimed"
   exit 1
 fi
-echo "Pod gpu-test1/pod0, container ctr0 claimed $gpu_test1_pod0_ctr0_gpu"
-observed_gpus+=("$gpu_test1_pod0_ctr0_gpu")
+echo "Pod npu-test1/pod0, container ctr0 claimed $npu_test1_pod0_ctr0_npu"
+observed_npus+=("$npu_test1_pod0_ctr0_npu")
 
-gpu_test1_pod1_ctr0_logs=$(kubectl logs -n gpu-test1 pod1 -c ctr0)
-gpu_test1_pod1_ctr0_gpus=$(gpus-from-logs "$gpu_test1_pod1_ctr0_logs")
-gpu_test1_pod1_ctr0_gpus_count=$(echo "$gpu_test1_pod1_ctr0_gpus" | wc -w)
-if [[ $gpu_test1_pod1_ctr0_gpus_count != 1 ]]; then
-  echo "Expected Pod gpu-test1/pod1, container ctr0 to have 1 GPU, but got $gpu_test1_pod1_ctr0_gpus_count: $gpu_test1_pod1_ctr0_gpus"
+npu_test1_pod1_ctr0_logs=$(kubectl logs -n npu-test1 pod1 -c ctr0)
+npu_test1_pod1_ctr0_npus=$(npus-from-logs "$npu_test1_pod1_ctr0_logs")
+npu_test1_pod1_ctr0_npus_count=$(echo "$npu_test1_pod1_ctr0_npus" | wc -w)
+if [[ $npu_test1_pod1_ctr0_npus_count != 1 ]]; then
+  echo "Expected Pod npu-test1/pod1, container ctr0 to have 1 NPU, but got $npu_test1_pod1_ctr0_npus_count: $npu_test1_pod1_ctr0_npus"
   exit 1
 fi
-gpu_test1_pod1_ctr0_gpu="$gpu_test1_pod1_ctr0_gpus"
-if gpu-already-seen "$gpu_test1_pod1_ctr0_gpu"; then
-  echo "Pod gpu-test1/pod1, container ctr0 should have a new GPU but claimed $gpu_test1_pod1_ctr0_gpu which is already claimed"
+npu_test1_pod1_ctr0_npu="$npu_test1_pod1_ctr0_npus"
+if npu-already-seen "$npu_test1_pod1_ctr0_npu"; then
+  echo "Pod npu-test1/pod1, container ctr0 should have a new NPU but claimed $npu_test1_pod1_ctr0_npu which is already claimed"
   exit 1
 fi
-echo "Pod gpu-test1/pod1, container ctr0 claimed $gpu_test1_pod1_ctr0_gpu"
-observed_gpus+=("$gpu_test1_pod1_ctr0_gpu")
+echo "Pod npu-test1/pod1, container ctr0 claimed $npu_test1_pod1_ctr0_npu"
+observed_npus+=("$npu_test1_pod1_ctr0_npu")
 
 
-kubectl wait --for=condition=Ready -n gpu-test2 pod/pod0 --timeout=120s
-gpu_test_2=$(kubectl get pods -n gpu-test2 | grep -c 'Running')
-if [ $gpu_test_2 != 1 ]; then
-    echo "gpu_test_2 $gpu_test_2 failed to match against 1 expected pod"
+kubectl wait --for=condition=Ready -n npu-test2 pod/pod0 --timeout=120s
+npu_test_2=$(kubectl get pods -n npu-test2 | grep -c 'Running')
+if [ $npu_test_2 != 1 ]; then
+    echo "npu_test_2 $npu_test_2 failed to match against 1 expected pod"
     exit 1
 fi
 
-gpu_test2_pod0_ctr0_logs=$(kubectl logs -n gpu-test2 pod0 -c ctr0)
-gpu_test2_pod0_ctr0_gpus=$(gpus-from-logs "$gpu_test2_pod0_ctr0_logs")
-gpu_test2_pod0_ctr0_gpus_count=$(echo "$gpu_test2_pod0_ctr0_gpus" | wc -w)
-if [[ $gpu_test2_pod0_ctr0_gpus_count != 2 ]]; then
-  echo "Expected Pod gpu-test2/pod0, container ctr0 to have 2 GPUs, but got $gpu_test2_pod0_ctr0_gpus_count: $gpu_test2_pod0_ctr0_gpus"
+npu_test2_pod0_ctr0_logs=$(kubectl logs -n npu-test2 pod0 -c ctr0)
+npu_test2_pod0_ctr0_npus=$(npus-from-logs "$npu_test2_pod0_ctr0_logs")
+npu_test2_pod0_ctr0_npus_count=$(echo "$npu_test2_pod0_ctr0_npus" | wc -w)
+if [[ $npu_test2_pod0_ctr0_npus_count != 2 ]]; then
+  echo "Expected Pod npu-test2/pod0, container ctr0 to have 2 NPUs, but got $npu_test2_pod0_ctr0_npus_count: $npu_test2_pod0_ctr0_npus"
   exit 1
 fi
-echo "$gpu_test2_pod0_ctr0_gpus" | while read gpu_test2_pod0_ctr0_gpu; do
-  if gpu-already-seen "$gpu_test2_pod0_ctr0_gpu"; then
-    echo "Pod gpu-test2/pod0, container ctr0 should have a new GPU but claimed $gpu_test2_pod0_ctr0_gpu which is already claimed"
+echo "$npu_test2_pod0_ctr0_npus" | while read npu_test2_pod0_ctr0_npu; do
+  if npu-already-seen "$npu_test2_pod0_ctr0_npu"; then
+    echo "Pod npu-test2/pod0, container ctr0 should have a new NPU but claimed $npu_test2_pod0_ctr0_npu which is already claimed"
     exit 1
   fi
-  echo "Pod gpu-test2/pod0, container ctr0 claimed $gpu_test2_pod0_ctr0_gpu"
-  observed_gpus+=("$gpu_test2_pod0_ctr0_gpu")
+  echo "Pod npu-test2/pod0, container ctr0 claimed $npu_test2_pod0_ctr0_npu"
+  observed_npus+=("$npu_test2_pod0_ctr0_npu")
 done
 
 
-kubectl wait --for=condition=Ready -n gpu-test3 pod/pod0 --timeout=120s
-gpu_test_3=$(kubectl get pods -n gpu-test3 | grep -c 'Running')
-if [ $gpu_test_3 != 1 ]; then
-    echo "gpu_test_3 $gpu_test_3 failed to match against 1 expected pod"
+kubectl wait --for=condition=Ready -n npu-test3 pod/pod0 --timeout=120s
+npu_test_3=$(kubectl get pods -n npu-test3 | grep -c 'Running')
+if [ $npu_test_3 != 1 ]; then
+    echo "npu_test_3 $npu_test_3 failed to match against 1 expected pod"
     exit 1
 fi
 
-gpu_test3_pod0_ctr0_logs=$(kubectl logs -n gpu-test3 pod0 -c ctr0)
-gpu_test3_pod0_ctr0_gpus=$(gpus-from-logs "$gpu_test3_pod0_ctr0_logs")
-gpu_test3_pod0_ctr0_gpus_count=$(echo "$gpu_test3_pod0_ctr0_gpus" | wc -w)
-if [[ $gpu_test3_pod0_ctr0_gpus_count != 1 ]]; then
-  echo "Expected Pod gpu-test3/pod0, container ctr0 to have 1 GPU, but got $gpu_test3_pod0_ctr0_gpus_count: $gpu_test3_pod0_ctr0_gpus"
+npu_test3_pod0_ctr0_logs=$(kubectl logs -n npu-test3 pod0 -c ctr0)
+npu_test3_pod0_ctr0_npus=$(npus-from-logs "$npu_test3_pod0_ctr0_logs")
+npu_test3_pod0_ctr0_npus_count=$(echo "$npu_test3_pod0_ctr0_npus" | wc -w)
+if [[ $npu_test3_pod0_ctr0_npus_count != 1 ]]; then
+  echo "Expected Pod npu-test3/pod0, container ctr0 to have 1 NPU, but got $npu_test3_pod0_ctr0_npus_count: $npu_test3_pod0_ctr0_npus"
   exit 1
 fi
-gpu_test3_pod0_ctr0_gpu="$gpu_test3_pod0_ctr0_gpus"
-if gpu-already-seen "$gpu_test3_pod0_ctr0_gpu"; then
-  echo "Pod gpu-test3/pod0, container ctr0 should have a new GPU but claimed $gpu_test3_pod0_ctr0_gpu which is already claimed"
+npu_test3_pod0_ctr0_npu="$npu_test3_pod0_ctr0_npus"
+if npu-already-seen "$npu_test3_pod0_ctr0_npu"; then
+  echo "Pod npu-test3/pod0, container ctr0 should have a new NPU but claimed $npu_test3_pod0_ctr0_npu which is already claimed"
   exit 1
 fi
-echo "Pod gpu-test3/pod0, container ctr0 claimed $gpu_test3_pod0_ctr0_gpu"
-observed_gpus+=("$gpu_test3_pod0_ctr0_gpu")
-gpu_test3_pod0_ctr0_sharing_strategy=$(gpu-sharing-strategy-from-logs "$gpu_test3_pod0_ctr0_logs" $(gpu-id "$gpu_test3_pod0_ctr0_gpu"))
-if [[ "$gpu_test3_pod0_ctr0_sharing_strategy" != "TimeSlicing" ]]; then
-  echo "Expected Pod gpu-test3/pod0, container ctr0 to have sharing strategy TimeSlicing, got $gpu_test3_pod0_ctr0_sharing_strategy"
+echo "Pod npu-test3/pod0, container ctr0 claimed $npu_test3_pod0_ctr0_npu"
+observed_npus+=("$npu_test3_pod0_ctr0_npu")
+npu_test3_pod0_ctr0_sharing_strategy=$(npu-sharing-strategy-from-logs "$npu_test3_pod0_ctr0_logs" $(npu-id "$npu_test3_pod0_ctr0_npu"))
+if [[ "$npu_test3_pod0_ctr0_sharing_strategy" != "TimeSlicing" ]]; then
+  echo "Expected Pod npu-test3/pod0, container ctr0 to have sharing strategy TimeSlicing, got $npu_test3_pod0_ctr0_sharing_strategy"
   exit 1
 fi
-gpu_test3_pod0_ctr0_timeslice_interval=$(gpu-timeslice-interval-from-logs "$gpu_test3_pod0_ctr0_logs" $(gpu-id "$gpu_test3_pod0_ctr0_gpu"))
-if [[ "$gpu_test3_pod0_ctr0_timeslice_interval" != "Default" ]]; then
-  echo "Expected Pod gpu-test3/pod0, container ctr0 to have timeslice interval Default, got $gpu_test3_pod0_ctr0_timeslice_interval"
-  exit 1
-fi
-
-gpu_test3_pod0_ctr1_logs=$(kubectl logs -n gpu-test3 pod0 -c ctr1)
-gpu_test3_pod0_ctr1_gpus=$(gpus-from-logs "$gpu_test3_pod0_ctr1_logs")
-gpu_test3_pod0_ctr1_gpus_count=$(echo "$gpu_test3_pod0_ctr1_gpus" | wc -w)
-if [[ $gpu_test3_pod0_ctr1_gpus_count != 1 ]]; then
-  echo "Expected Pod gpu-test3/pod0, container ctr1 to have 1 GPU, but got $gpu_test3_pod0_ctr1_gpus_count: $gpu_test3_pod0_ctr1_gpus"
-  exit 1
-fi
-gpu_test3_pod0_ctr1_gpu="$gpu_test3_pod0_ctr1_gpus"
-echo "Pod gpu-test3/pod0, container ctr1 claimed $gpu_test3_pod0_ctr1_gpu"
-if [[ "$gpu_test3_pod0_ctr1_gpu" != "$gpu_test3_pod0_ctr0_gpu" ]]; then
-  echo "Pod gpu-test3/pod0, container ctr1 should claim the same GPU as Pod gpu-test3/pod0, container ctr0, but did not"
-  exit 1
-fi
-gpu_test3_pod0_ctr1_sharing_strategy=$(gpu-sharing-strategy-from-logs "$gpu_test3_pod0_ctr1_logs" $(gpu-id "$gpu_test3_pod0_ctr1_gpu"))
-if [[ "$gpu_test3_pod0_ctr1_sharing_strategy" != "TimeSlicing" ]]; then
-  echo "Expected Pod gpu-test3/pod0, container ctr1 to have sharing strategy TimeSlicing, got $gpu_test3_pod0_ctr1_sharing_strategy"
-  exit 1
-fi
-gpu_test3_pod0_ctr1_timeslice_interval=$(gpu-timeslice-interval-from-logs "$gpu_test3_pod0_ctr1_logs" $(gpu-id "$gpu_test3_pod0_ctr1_gpu"))
-if [[ "$gpu_test3_pod0_ctr1_timeslice_interval" != "Default" ]]; then
-  echo "Expected Pod gpu-test3/pod0, container ctr1 to have timeslice interval Default, got $gpu_test3_pod0_ctr1_timeslice_interval"
+npu_test3_pod0_ctr0_timeslice_interval=$(npu-timeslice-interval-from-logs "$npu_test3_pod0_ctr0_logs" $(npu-id "$npu_test3_pod0_ctr0_npu"))
+if [[ "$npu_test3_pod0_ctr0_timeslice_interval" != "Default" ]]; then
+  echo "Expected Pod npu-test3/pod0, container ctr0 to have timeslice interval Default, got $npu_test3_pod0_ctr0_timeslice_interval"
   exit 1
 fi
 
+npu_test3_pod0_ctr1_logs=$(kubectl logs -n npu-test3 pod0 -c ctr1)
+npu_test3_pod0_ctr1_npus=$(npus-from-logs "$npu_test3_pod0_ctr1_logs")
+npu_test3_pod0_ctr1_npus_count=$(echo "$npu_test3_pod0_ctr1_npus" | wc -w)
+if [[ $npu_test3_pod0_ctr1_npus_count != 1 ]]; then
+  echo "Expected Pod npu-test3/pod0, container ctr1 to have 1 NPU, but got $npu_test3_pod0_ctr1_npus_count: $npu_test3_pod0_ctr1_npus"
+  exit 1
+fi
+npu_test3_pod0_ctr1_npu="$npu_test3_pod0_ctr1_npus"
+echo "Pod npu-test3/pod0, container ctr1 claimed $npu_test3_pod0_ctr1_npu"
+if [[ "$npu_test3_pod0_ctr1_npu" != "$npu_test3_pod0_ctr0_npu" ]]; then
+  echo "Pod npu-test3/pod0, container ctr1 should claim the same NPU as Pod npu-test3/pod0, container ctr0, but did not"
+  exit 1
+fi
+npu_test3_pod0_ctr1_sharing_strategy=$(npu-sharing-strategy-from-logs "$npu_test3_pod0_ctr1_logs" $(npu-id "$npu_test3_pod0_ctr1_npu"))
+if [[ "$npu_test3_pod0_ctr1_sharing_strategy" != "TimeSlicing" ]]; then
+  echo "Expected Pod npu-test3/pod0, container ctr1 to have sharing strategy TimeSlicing, got $npu_test3_pod0_ctr1_sharing_strategy"
+  exit 1
+fi
+npu_test3_pod0_ctr1_timeslice_interval=$(npu-timeslice-interval-from-logs "$npu_test3_pod0_ctr1_logs" $(npu-id "$npu_test3_pod0_ctr1_npu"))
+if [[ "$npu_test3_pod0_ctr1_timeslice_interval" != "Default" ]]; then
+  echo "Expected Pod npu-test3/pod0, container ctr1 to have timeslice interval Default, got $npu_test3_pod0_ctr1_timeslice_interval"
+  exit 1
+fi
 
-kubectl wait --for=condition=Ready -n gpu-test4 pod/pod0 --timeout=120s
-kubectl wait --for=condition=Ready -n gpu-test4 pod/pod1 --timeout=120s
-gpu_test_4=$(kubectl get pods -n gpu-test4 | grep -c 'Running')
-if [ $gpu_test_4 != 2 ]; then
-    echo "gpu_test_4 $gpu_test_4 failed to match against 2 expected pods"
+
+kubectl wait --for=condition=Ready -n npu-test4 pod/pod0 --timeout=120s
+kubectl wait --for=condition=Ready -n npu-test4 pod/pod1 --timeout=120s
+npu_test_4=$(kubectl get pods -n npu-test4 | grep -c 'Running')
+if [ $npu_test_4 != 2 ]; then
+    echo "npu_test_4 $npu_test_4 failed to match against 2 expected pods"
     exit 1
 fi
 
-gpu_test4_pod0_ctr0_logs=$(kubectl logs -n gpu-test4 pod0 -c ctr0)
-gpu_test4_pod0_ctr0_gpus=$(gpus-from-logs "$gpu_test4_pod0_ctr0_logs")
-gpu_test4_pod0_ctr0_gpus_count=$(echo "$gpu_test4_pod0_ctr0_gpus" | wc -w)
-if [[ $gpu_test4_pod0_ctr0_gpus_count != 1 ]]; then
-  echo "Expected Pod gpu-test4/pod0, container ctr0 to have 1 GPU, but got $gpu_test4_pod0_ctr0_gpus_count: $gpu_test4_pod0_ctr0_gpus"
+npu_test4_pod0_ctr0_logs=$(kubectl logs -n npu-test4 pod0 -c ctr0)
+npu_test4_pod0_ctr0_npus=$(npus-from-logs "$npu_test4_pod0_ctr0_logs")
+npu_test4_pod0_ctr0_npus_count=$(echo "$npu_test4_pod0_ctr0_npus" | wc -w)
+if [[ $npu_test4_pod0_ctr0_npus_count != 1 ]]; then
+  echo "Expected Pod npu-test4/pod0, container ctr0 to have 1 NPU, but got $npu_test4_pod0_ctr0_npus_count: $npu_test4_pod0_ctr0_npus"
   exit 1
 fi
-gpu_test4_pod0_ctr0_gpu="$gpu_test4_pod0_ctr0_gpus"
-if gpu-already-seen "$gpu_test4_pod0_ctr0_gpu"; then
-  echo "Pod gpu-test4/pod0, container ctr0 should have a new GPU but claimed $gpu_test4_pod0_ctr0_gpu which is already claimed"
+npu_test4_pod0_ctr0_npu="$npu_test4_pod0_ctr0_npus"
+if npu-already-seen "$npu_test4_pod0_ctr0_npu"; then
+  echo "Pod npu-test4/pod0, container ctr0 should have a new NPU but claimed $npu_test4_pod0_ctr0_npu which is already claimed"
   exit 1
 fi
-echo "Pod gpu-test4/pod0, container ctr0 claimed $gpu_test4_pod0_ctr0_gpu"
-observed_gpus+=("$gpu_test4_pod0_ctr0_gpu")
-gpu_test4_pod0_ctr0_sharing_strategy=$(gpu-sharing-strategy-from-logs "$gpu_test4_pod0_ctr0_logs" $(gpu-id "$gpu_test4_pod0_ctr0_gpu"))
-if [[ "$gpu_test4_pod0_ctr0_sharing_strategy" != "TimeSlicing" ]]; then
-  echo "Expected Pod gpu-test4/pod0, container ctr0 to have sharing strategy TimeSlicing, got $gpu_test4_pod0_ctr0_sharing_strategy"
+echo "Pod npu-test4/pod0, container ctr0 claimed $npu_test4_pod0_ctr0_npu"
+observed_npus+=("$npu_test4_pod0_ctr0_npu")
+npu_test4_pod0_ctr0_sharing_strategy=$(npu-sharing-strategy-from-logs "$npu_test4_pod0_ctr0_logs" $(npu-id "$npu_test4_pod0_ctr0_npu"))
+if [[ "$npu_test4_pod0_ctr0_sharing_strategy" != "TimeSlicing" ]]; then
+  echo "Expected Pod npu-test4/pod0, container ctr0 to have sharing strategy TimeSlicing, got $npu_test4_pod0_ctr0_sharing_strategy"
   exit 1
 fi
-gpu_test4_pod0_ctr0_timeslice_interval=$(gpu-timeslice-interval-from-logs "$gpu_test4_pod0_ctr0_logs" $(gpu-id "$gpu_test4_pod0_ctr0_gpu"))
-if [[ "$gpu_test4_pod0_ctr0_timeslice_interval" != "Default" ]]; then
-  echo "Expected Pod gpu-test4/pod0, container ctr0 to have timeslice interval Default, got $gpu_test4_pod0_ctr0_timeslice_interval"
-  exit 1
-fi
-
-gpu_test4_pod1_ctr0_logs=$(kubectl logs -n gpu-test4 pod1 -c ctr0)
-gpu_test4_pod1_ctr0_gpus=$(gpus-from-logs "$gpu_test4_pod1_ctr0_logs")
-gpu_test4_pod1_ctr0_gpus_count=$(echo "$gpu_test4_pod1_ctr0_gpus" | wc -w)
-if [[ $gpu_test4_pod1_ctr0_gpus_count != 1 ]]; then
-  echo "Expected Pod gpu-test4/pod1, container ctr0 to have 1 GPU, but got $gpu_test4_pod1_ctr0_gpus_count: $gpu_test4_pod1_ctr0_gpus"
-  exit 1
-fi
-gpu_test4_pod1_ctr0_gpu="$gpu_test4_pod1_ctr0_gpus"
-echo "Pod gpu-test4/pod1, container ctr0 claimed $gpu_test4_pod1_ctr0_gpu"
-if [[ "$gpu_test4_pod1_ctr0_gpu" != "$gpu_test4_pod1_ctr0_gpu" ]]; then
-  echo "Pod gpu-test4/pod1, container ctr0 should claim the same GPU as Pod gpu-test4/pod1, container ctr0, but did not"
-  exit 1
-fi
-gpu_test4_pod1_ctr0_sharing_strategy=$(gpu-sharing-strategy-from-logs "$gpu_test4_pod1_ctr0_logs" $(gpu-id "$gpu_test4_pod1_ctr0_gpu"))
-if [[ "$gpu_test4_pod1_ctr0_sharing_strategy" != "TimeSlicing" ]]; then
-  echo "Expected Pod gpu-test4/pod1, container ctr0 to have sharing strategy TimeSlicing, got $gpu_test4_pod1_ctr0_sharing_strategy"
-  exit 1
-fi
-gpu_test4_pod1_ctr0_timeslice_interval=$(gpu-timeslice-interval-from-logs "$gpu_test4_pod1_ctr0_logs" $(gpu-id "$gpu_test4_pod1_ctr0_gpu"))
-if [[ "$gpu_test4_pod1_ctr0_timeslice_interval" != "Default" ]]; then
-  echo "Expected Pod gpu-test4/pod1, container ctr0 to have timeslice interval Default, got $gpu_test4_pod1_ctr0_timeslice_interval"
+npu_test4_pod0_ctr0_timeslice_interval=$(npu-timeslice-interval-from-logs "$npu_test4_pod0_ctr0_logs" $(npu-id "$npu_test4_pod0_ctr0_npu"))
+if [[ "$npu_test4_pod0_ctr0_timeslice_interval" != "Default" ]]; then
+  echo "Expected Pod npu-test4/pod0, container ctr0 to have timeslice interval Default, got $npu_test4_pod0_ctr0_timeslice_interval"
   exit 1
 fi
 
+npu_test4_pod1_ctr0_logs=$(kubectl logs -n npu-test4 pod1 -c ctr0)
+npu_test4_pod1_ctr0_npus=$(npus-from-logs "$npu_test4_pod1_ctr0_logs")
+npu_test4_pod1_ctr0_npus_count=$(echo "$npu_test4_pod1_ctr0_npus" | wc -w)
+if [[ $npu_test4_pod1_ctr0_npus_count != 1 ]]; then
+  echo "Expected Pod npu-test4/pod1, container ctr0 to have 1 NPU, but got $npu_test4_pod1_ctr0_npus_count: $npu_test4_pod1_ctr0_npus"
+  exit 1
+fi
+npu_test4_pod1_ctr0_npu="$npu_test4_pod1_ctr0_npus"
+echo "Pod npu-test4/pod1, container ctr0 claimed $npu_test4_pod1_ctr0_npu"
+if [[ "$npu_test4_pod1_ctr0_npu" != "$npu_test4_pod1_ctr0_npu" ]]; then
+  echo "Pod npu-test4/pod1, container ctr0 should claim the same NPU as Pod npu-test4/pod1, container ctr0, but did not"
+  exit 1
+fi
+npu_test4_pod1_ctr0_sharing_strategy=$(npu-sharing-strategy-from-logs "$npu_test4_pod1_ctr0_logs" $(npu-id "$npu_test4_pod1_ctr0_npu"))
+if [[ "$npu_test4_pod1_ctr0_sharing_strategy" != "TimeSlicing" ]]; then
+  echo "Expected Pod npu-test4/pod1, container ctr0 to have sharing strategy TimeSlicing, got $npu_test4_pod1_ctr0_sharing_strategy"
+  exit 1
+fi
+npu_test4_pod1_ctr0_timeslice_interval=$(npu-timeslice-interval-from-logs "$npu_test4_pod1_ctr0_logs" $(npu-id "$npu_test4_pod1_ctr0_npu"))
+if [[ "$npu_test4_pod1_ctr0_timeslice_interval" != "Default" ]]; then
+  echo "Expected Pod npu-test4/pod1, container ctr0 to have timeslice interval Default, got $npu_test4_pod1_ctr0_timeslice_interval"
+  exit 1
+fi
 
-kubectl wait --for=condition=Ready -n gpu-test5 pod/pod0 --timeout=120s
-gpu_test_5=$(kubectl get pods -n gpu-test5 | grep -c 'Running')
-if [ $gpu_test_5 != 1 ]; then
-    echo "gpu_test_5 $gpu_test_5 failed to match against 1 expected pod"
+
+kubectl wait --for=condition=Ready -n npu-test5 pod/pod0 --timeout=120s
+npu_test_5=$(kubectl get pods -n npu-test5 | grep -c 'Running')
+if [ $npu_test_5 != 1 ]; then
+    echo "npu_test_5 $npu_test_5 failed to match against 1 expected pod"
     exit 1
 fi
 
-gpu_test5_pod0_ts_ctr0_logs=$(kubectl logs -n gpu-test5 pod0 -c ts-ctr0)
-gpu_test5_pod0_ts_ctr0_gpus=$(gpus-from-logs "$gpu_test5_pod0_ts_ctr0_logs")
-gpu_test5_pod0_ts_ctr0_gpus_count=$(echo "$gpu_test5_pod0_ts_ctr0_gpus" | wc -w)
-if [[ $gpu_test5_pod0_ts_ctr0_gpus_count != 1 ]]; then
-  echo "Expected Pod gpu-test5/pod0, container ts-ctr0 to have 1 GPU, but got $gpu_test5_pod0_ts_ctr0_gpus_count: $gpu_test5_pod0_ts_ctr0_gpus"
+npu_test5_pod0_ts_ctr0_logs=$(kubectl logs -n npu-test5 pod0 -c ts-ctr0)
+npu_test5_pod0_ts_ctr0_npus=$(npus-from-logs "$npu_test5_pod0_ts_ctr0_logs")
+npu_test5_pod0_ts_ctr0_npus_count=$(echo "$npu_test5_pod0_ts_ctr0_npus" | wc -w)
+if [[ $npu_test5_pod0_ts_ctr0_npus_count != 1 ]]; then
+  echo "Expected Pod npu-test5/pod0, container ts-ctr0 to have 1 NPU, but got $npu_test5_pod0_ts_ctr0_npus_count: $npu_test5_pod0_ts_ctr0_npus"
   exit 1
 fi
-gpu_test5_pod0_ts_ctr0_gpu="$gpu_test5_pod0_ts_ctr0_gpus"
-if gpu-already-seen "$gpu_test5_pod0_ts_ctr0_gpu"; then
-  echo "Pod gpu-test5/pod0, container ts-ctr0 should have a new GPU but claimed $gpu_test5_pod0_ts_ctr0_gpu which is already claimed"
+npu_test5_pod0_ts_ctr0_npu="$npu_test5_pod0_ts_ctr0_npus"
+if npu-already-seen "$npu_test5_pod0_ts_ctr0_npu"; then
+  echo "Pod npu-test5/pod0, container ts-ctr0 should have a new NPU but claimed $npu_test5_pod0_ts_ctr0_npu which is already claimed"
   exit 1
 fi
-echo "Pod gpu-test5/pod0, container ts-ctr0 claimed $gpu_test5_pod0_ts_ctr0_gpu"
-observed_gpus+=("$gpu_test5_pod0_ts_ctr0_gpu")
-gpu_test5_pod0_ts_ctr0_sharing_strategy=$(gpu-sharing-strategy-from-logs "$gpu_test5_pod0_ts_ctr0_logs" $(gpu-id "$gpu_test5_pod0_ts_ctr0_gpu"))
-if [[ "$gpu_test5_pod0_ts_ctr0_sharing_strategy" != "TimeSlicing" ]]; then
-  echo "Expected Pod gpu-test5/pod0, container ts-ctr0 to have sharing strategy TimeSlicing, got $gpu_test5_pod0_ts_ctr0_sharing_strategy"
+echo "Pod npu-test5/pod0, container ts-ctr0 claimed $npu_test5_pod0_ts_ctr0_npu"
+observed_npus+=("$npu_test5_pod0_ts_ctr0_npu")
+npu_test5_pod0_ts_ctr0_sharing_strategy=$(npu-sharing-strategy-from-logs "$npu_test5_pod0_ts_ctr0_logs" $(npu-id "$npu_test5_pod0_ts_ctr0_npu"))
+if [[ "$npu_test5_pod0_ts_ctr0_sharing_strategy" != "TimeSlicing" ]]; then
+  echo "Expected Pod npu-test5/pod0, container ts-ctr0 to have sharing strategy TimeSlicing, got $npu_test5_pod0_ts_ctr0_sharing_strategy"
   exit 1
 fi
-gpu_test5_pod0_ts_ctr0_timeslice_interval=$(gpu-timeslice-interval-from-logs "$gpu_test5_pod0_ts_ctr0_logs" $(gpu-id "$gpu_test5_pod0_ts_ctr0_gpu"))
-if [[ "$gpu_test5_pod0_ts_ctr0_timeslice_interval" != "Long" ]]; then
-  echo "Expected Pod gpu-test5/pod0, container ts-ctr0 to have timeslice interval Long, got $gpu_test5_pod0_ts_ctr0_timeslice_interval"
-  exit 1
-fi
-
-gpu_test5_pod0_ts_ctr1_logs=$(kubectl logs -n gpu-test5 pod0 -c ts-ctr1)
-gpu_test5_pod0_ts_ctr1_gpus=$(gpus-from-logs "$gpu_test5_pod0_ts_ctr1_logs")
-gpu_test5_pod0_ts_ctr1_gpus_count=$(echo "$gpu_test5_pod0_ts_ctr1_gpus" | wc -w)
-if [[ $gpu_test5_pod0_ts_ctr1_gpus_count != 1 ]]; then
-  echo "Expected Pod gpu-test5/pod0, container ts-ctr1 to have 1 GPU, but got $gpu_test5_pod0_ts_ctr1_gpus_count: $gpu_test5_pod0_ts_ctr1_gpus"
-  exit 1
-fi
-gpu_test5_pod0_ts_ctr1_gpu="$gpu_test5_pod0_ts_ctr1_gpus"
-echo "Pod gpu-test5/pod0, container ts-ctr1 claimed $gpu_test5_pod0_ts_ctr1_gpu"
-if [[ "$gpu_test5_pod0_ts_ctr1_gpu" != "$gpu_test5_pod0_ts_ctr0_gpu" ]]; then
-  echo "Pod gpu-test5/pod0, container ts-ctr1 should claim the same GPU as Pod gpu-test5/pod0, container ts-ctr0, but did not"
-  exit 1
-fi
-gpu_test5_pod0_ts_ctr1_sharing_strategy=$(gpu-sharing-strategy-from-logs "$gpu_test5_pod0_ts_ctr1_logs" $(gpu-id "$gpu_test5_pod0_ts_ctr1_gpu"))
-if [[ "$gpu_test5_pod0_ts_ctr1_sharing_strategy" != "TimeSlicing" ]]; then
-  echo "Expected Pod gpu-test5/pod0, container ts-ctr1 to have sharing strategy TimeSlicing, got $gpu_test5_pod0_ts_ctr1_sharing_strategy"
-  exit 1
-fi
-gpu_test5_pod0_ts_ctr1_timeslice_interval=$(gpu-timeslice-interval-from-logs "$gpu_test5_pod0_ts_ctr1_logs" $(gpu-id "$gpu_test5_pod0_ts_ctr1_gpu"))
-if [[ "$gpu_test5_pod0_ts_ctr1_timeslice_interval" != "Long" ]]; then
-  echo "Expected Pod gpu-test5/pod0, container ts-ctr1 to have timeslice interval Long, got $gpu_test5_pod0_ts_ctr1_timeslice_interval"
+npu_test5_pod0_ts_ctr0_timeslice_interval=$(npu-timeslice-interval-from-logs "$npu_test5_pod0_ts_ctr0_logs" $(npu-id "$npu_test5_pod0_ts_ctr0_npu"))
+if [[ "$npu_test5_pod0_ts_ctr0_timeslice_interval" != "Long" ]]; then
+  echo "Expected Pod npu-test5/pod0, container ts-ctr0 to have timeslice interval Long, got $npu_test5_pod0_ts_ctr0_timeslice_interval"
   exit 1
 fi
 
-gpu_test5_pod0_sp_ctr0_logs=$(kubectl logs -n gpu-test5 pod0 -c sp-ctr0)
-gpu_test5_pod0_sp_ctr0_gpus=$(gpus-from-logs "$gpu_test5_pod0_sp_ctr0_logs")
-gpu_test5_pod0_sp_ctr0_gpus_count=$(echo "$gpu_test5_pod0_sp_ctr0_gpus" | wc -w)
-if [[ $gpu_test5_pod0_sp_ctr0_gpus_count != 1 ]]; then
-  echo "Expected Pod gpu-test5/pod0, container sp-ctr0 to have 1 GPU, but got $gpu_test5_pod0_sp_ctr0_gpus_count: $gpu_test5_pod0_sp_ctr0_gpus"
+npu_test5_pod0_ts_ctr1_logs=$(kubectl logs -n npu-test5 pod0 -c ts-ctr1)
+npu_test5_pod0_ts_ctr1_npus=$(npus-from-logs "$npu_test5_pod0_ts_ctr1_logs")
+npu_test5_pod0_ts_ctr1_npus_count=$(echo "$npu_test5_pod0_ts_ctr1_npus" | wc -w)
+if [[ $npu_test5_pod0_ts_ctr1_npus_count != 1 ]]; then
+  echo "Expected Pod npu-test5/pod0, container ts-ctr1 to have 1 NPU, but got $npu_test5_pod0_ts_ctr1_npus_count: $npu_test5_pod0_ts_ctr1_npus"
   exit 1
 fi
-gpu_test5_pod0_sp_ctr0_gpu="$gpu_test5_pod0_sp_ctr0_gpus"
-if gpu-already-seen "$gpu_test5_pod0_sp_ctr0_gpu"; then
-  echo "Pod gpu-test5/pod0, container sp-ctr0 should have a new GPU but claimed $gpu_test5_pod0_sp_ctr0_gpu which is already claimed"
+npu_test5_pod0_ts_ctr1_npu="$npu_test5_pod0_ts_ctr1_npus"
+echo "Pod npu-test5/pod0, container ts-ctr1 claimed $npu_test5_pod0_ts_ctr1_npu"
+if [[ "$npu_test5_pod0_ts_ctr1_npu" != "$npu_test5_pod0_ts_ctr0_npu" ]]; then
+  echo "Pod npu-test5/pod0, container ts-ctr1 should claim the same NPU as Pod npu-test5/pod0, container ts-ctr0, but did not"
   exit 1
 fi
-echo "Pod gpu-test5/pod0, container sp-ctr0 claimed $gpu_test5_pod0_sp_ctr0_gpu"
-observed_gpus+=("$gpu_test5_pod0_sp_ctr0_gpu")
-gpu_test5_pod0_sp_ctr0_sharing_strategy=$(gpu-sharing-strategy-from-logs "$gpu_test5_pod0_sp_ctr0_logs" $(gpu-id "$gpu_test5_pod0_sp_ctr0_gpu"))
-if [[ "$gpu_test5_pod0_sp_ctr0_sharing_strategy" != "SpacePartitioning" ]]; then
-  echo "Expected Pod gpu-test5/pod0, container sp-ctr0 to have sharing strategy SpacePartitioning, got $gpu_test5_pod0_sp_ctr0_sharing_strategy"
+npu_test5_pod0_ts_ctr1_sharing_strategy=$(npu-sharing-strategy-from-logs "$npu_test5_pod0_ts_ctr1_logs" $(npu-id "$npu_test5_pod0_ts_ctr1_npu"))
+if [[ "$npu_test5_pod0_ts_ctr1_sharing_strategy" != "TimeSlicing" ]]; then
+  echo "Expected Pod npu-test5/pod0, container ts-ctr1 to have sharing strategy TimeSlicing, got $npu_test5_pod0_ts_ctr1_sharing_strategy"
   exit 1
 fi
-gpu_test5_pod0_sp_ctr0_partition_count=$(gpu-partition-count-from-logs "$gpu_test5_pod0_sp_ctr0_logs" $(gpu-id "$gpu_test5_pod0_sp_ctr0_gpu"))
-if [[ "$gpu_test5_pod0_sp_ctr0_partition_count" != "10" ]]; then
-  echo "Expected Pod gpu-test5/pod0, container sp-ctr0 to have partition count 10, got $gpu_test5_pod0_sp_ctr0_partition_count"
+npu_test5_pod0_ts_ctr1_timeslice_interval=$(npu-timeslice-interval-from-logs "$npu_test5_pod0_ts_ctr1_logs" $(npu-id "$npu_test5_pod0_ts_ctr1_npu"))
+if [[ "$npu_test5_pod0_ts_ctr1_timeslice_interval" != "Long" ]]; then
+  echo "Expected Pod npu-test5/pod0, container ts-ctr1 to have timeslice interval Long, got $npu_test5_pod0_ts_ctr1_timeslice_interval"
   exit 1
 fi
 
-gpu_test5_pod0_sp_ctr1_logs=$(kubectl logs -n gpu-test5 pod0 -c sp-ctr1)
-gpu_test5_pod0_sp_ctr1_gpus=$(gpus-from-logs "$gpu_test5_pod0_sp_ctr1_logs")
-gpu_test5_pod0_sp_ctr1_gpus_count=$(echo "$gpu_test5_pod0_sp_ctr1_gpus" | wc -w)
-if [[ $gpu_test5_pod0_sp_ctr1_gpus_count != 1 ]]; then
-  echo "Expected Pod gpu-test5/pod0, container sp-ctr1 to have 1 GPU, but got $gpu_test5_pod0_sp_ctr1_gpus_count: $gpu_test5_pod0_sp_ctr1_gpus"
+npu_test5_pod0_sp_ctr0_logs=$(kubectl logs -n npu-test5 pod0 -c sp-ctr0)
+npu_test5_pod0_sp_ctr0_npus=$(npus-from-logs "$npu_test5_pod0_sp_ctr0_logs")
+npu_test5_pod0_sp_ctr0_npus_count=$(echo "$npu_test5_pod0_sp_ctr0_npus" | wc -w)
+if [[ $npu_test5_pod0_sp_ctr0_npus_count != 1 ]]; then
+  echo "Expected Pod npu-test5/pod0, container sp-ctr0 to have 1 NPU, but got $npu_test5_pod0_sp_ctr0_npus_count: $npu_test5_pod0_sp_ctr0_npus"
   exit 1
 fi
-gpu_test5_pod0_sp_ctr1_gpu="$gpu_test5_pod0_sp_ctr1_gpus"
-echo "Pod gpu-test5/pod0, container sp-ctr1 claimed $gpu_test5_pod0_sp_ctr1_gpu"
-if [[ "$gpu_test5_pod0_sp_ctr1_gpu" != "$gpu_test5_pod0_sp_ctr0_gpu" ]]; then
-  echo "Pod gpu-test5/pod0, container sp-ctr1 should claim the same GPU as Pod gpu-test5/pod0, container sp-ctr0, but did not"
+npu_test5_pod0_sp_ctr0_npu="$npu_test5_pod0_sp_ctr0_npus"
+if npu-already-seen "$npu_test5_pod0_sp_ctr0_npu"; then
+  echo "Pod npu-test5/pod0, container sp-ctr0 should have a new NPU but claimed $npu_test5_pod0_sp_ctr0_npu which is already claimed"
   exit 1
 fi
-gpu_test5_pod0_sp_ctr1_sharing_strategy=$(gpu-sharing-strategy-from-logs "$gpu_test5_pod0_sp_ctr1_logs" $(gpu-id "$gpu_test5_pod0_sp_ctr1_gpu"))
-if [[ "$gpu_test5_pod0_sp_ctr1_sharing_strategy" != "SpacePartitioning" ]]; then
-  echo "Expected Pod gpu-test5/pod0, container sp-ctr1 to have sharing strategy SpacePartitioning, got $gpu_test5_pod0_sp_ctr1_sharing_strategy"
+echo "Pod npu-test5/pod0, container sp-ctr0 claimed $npu_test5_pod0_sp_ctr0_npu"
+observed_npus+=("$npu_test5_pod0_sp_ctr0_npu")
+npu_test5_pod0_sp_ctr0_sharing_strategy=$(npu-sharing-strategy-from-logs "$npu_test5_pod0_sp_ctr0_logs" $(npu-id "$npu_test5_pod0_sp_ctr0_npu"))
+if [[ "$npu_test5_pod0_sp_ctr0_sharing_strategy" != "SpacePartitioning" ]]; then
+  echo "Expected Pod npu-test5/pod0, container sp-ctr0 to have sharing strategy SpacePartitioning, got $npu_test5_pod0_sp_ctr0_sharing_strategy"
   exit 1
 fi
-gpu_test5_pod0_sp_ctr1_partition_count=$(gpu-partition-count-from-logs "$gpu_test5_pod0_sp_ctr1_logs" $(gpu-id "$gpu_test5_pod0_sp_ctr1_gpu"))
-if [[ "$gpu_test5_pod0_sp_ctr1_partition_count" != "10" ]]; then
-  echo "Expected Pod gpu-test5/pod0, container sp-ctr1 to have partition count 10, got $gpu_test5_pod0_sp_ctr1_partition_count"
+npu_test5_pod0_sp_ctr0_partition_count=$(npu-partition-count-from-logs "$npu_test5_pod0_sp_ctr0_logs" $(npu-id "$npu_test5_pod0_sp_ctr0_npu"))
+if [[ "$npu_test5_pod0_sp_ctr0_partition_count" != "10" ]]; then
+  echo "Expected Pod npu-test5/pod0, container sp-ctr0 to have partition count 10, got $npu_test5_pod0_sp_ctr0_partition_count"
+  exit 1
+fi
+
+npu_test5_pod0_sp_ctr1_logs=$(kubectl logs -n npu-test5 pod0 -c sp-ctr1)
+npu_test5_pod0_sp_ctr1_npus=$(npus-from-logs "$npu_test5_pod0_sp_ctr1_logs")
+npu_test5_pod0_sp_ctr1_npus_count=$(echo "$npu_test5_pod0_sp_ctr1_npus" | wc -w)
+if [[ $npu_test5_pod0_sp_ctr1_npus_count != 1 ]]; then
+  echo "Expected Pod npu-test5/pod0, container sp-ctr1 to have 1 NPU, but got $npu_test5_pod0_sp_ctr1_npus_count: $npu_test5_pod0_sp_ctr1_npus"
+  exit 1
+fi
+npu_test5_pod0_sp_ctr1_npu="$npu_test5_pod0_sp_ctr1_npus"
+echo "Pod npu-test5/pod0, container sp-ctr1 claimed $npu_test5_pod0_sp_ctr1_npu"
+if [[ "$npu_test5_pod0_sp_ctr1_npu" != "$npu_test5_pod0_sp_ctr0_npu" ]]; then
+  echo "Pod npu-test5/pod0, container sp-ctr1 should claim the same NPU as Pod npu-test5/pod0, container sp-ctr0, but did not"
+  exit 1
+fi
+npu_test5_pod0_sp_ctr1_sharing_strategy=$(npu-sharing-strategy-from-logs "$npu_test5_pod0_sp_ctr1_logs" $(npu-id "$npu_test5_pod0_sp_ctr1_npu"))
+if [[ "$npu_test5_pod0_sp_ctr1_sharing_strategy" != "SpacePartitioning" ]]; then
+  echo "Expected Pod npu-test5/pod0, container sp-ctr1 to have sharing strategy SpacePartitioning, got $npu_test5_pod0_sp_ctr1_sharing_strategy"
+  exit 1
+fi
+npu_test5_pod0_sp_ctr1_partition_count=$(npu-partition-count-from-logs "$npu_test5_pod0_sp_ctr1_logs" $(npu-id "$npu_test5_pod0_sp_ctr1_npu"))
+if [[ "$npu_test5_pod0_sp_ctr1_partition_count" != "10" ]]; then
+  echo "Expected Pod npu-test5/pod0, container sp-ctr1 to have partition count 10, got $npu_test5_pod0_sp_ctr1_partition_count"
   exit 1
 fi
 
 # test that deletion is fast (less than the default grace period of 30s)
 # see https://github.com/kubernetes/kubernetes/issues/127188 for details
-kubectl delete -f demo/gpu-test1.yaml --timeout=25s
-kubectl delete -f demo/gpu-test2.yaml --timeout=25s
-kubectl delete -f demo/gpu-test3.yaml --timeout=25s
-kubectl delete -f demo/gpu-test4.yaml --timeout=25s
-kubectl delete -f demo/gpu-test5.yaml --timeout=25s
+kubectl delete -f demo/npu-test1.yaml --timeout=25s
+kubectl delete -f demo/npu-test2.yaml --timeout=25s
+kubectl delete -f demo/npu-test3.yaml --timeout=25s
+kubectl delete -f demo/npu-test4.yaml --timeout=25s
+kubectl delete -f demo/npu-test5.yaml --timeout=25s
 
 echo "test ran successfully"
