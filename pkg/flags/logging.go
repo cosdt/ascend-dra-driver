@@ -46,12 +46,6 @@ func NewLoggingConfig() *LoggingConfig {
 	return l
 }
 
-// Apply should be called in a cli.App.Before directly after parsing command
-// line flags and before running any code which emits log entries.
-func (l *LoggingConfig) Apply() error {
-	return logsapi.ValidateAndApply(l.config, l.featureGate)
-}
-
 // Flags returns the flags for the configuration.
 func (l *LoggingConfig) Flags() []cli.Flag {
 	var fs pflag.FlagSet
