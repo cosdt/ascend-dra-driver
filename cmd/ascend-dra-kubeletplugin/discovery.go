@@ -19,52 +19,33 @@ package main
 import (
 	"fmt"
 	"log"
-	"math/rand"
 	"os"
-	"strings"
 
-	"Ascend-dra-driver/pkg/server"
-
-	"huawei.com/npu-exporter/v5/devmanager"
 	resourceapi "k8s.io/api/resource/v1beta1"
 	"k8s.io/utils/ptr"
-
-	"github.com/google/uuid"
 )
 
 // fetchAiCore attempts to retrieve the total number of AI Cores on the card.
-// If it fails, it returns a fallback value according to the device type.
-func fetchAiCore(hdm *server.HwDevManager, devType string) (int, error) {
-	aiCoreCount, err := hdm.GetChipAiCoreCount()
+func fetchAiCore(mgr *AscendManager) (int, error) {
+	aiCoreCount, err := mgr.GetChipAiCoreCount()
 	if err == nil {
 		return int(aiCoreCount), nil
-	}
-	if strings.Contains(devType, "Ascend910") {
-		return 32, err
-	} else if strings.Contains(devType, "Ascend310P") {
-		return 16, err
 	}
 	return 0, err
 }
 
 // fetchMemory attempts to retrieve total memory from the card.
-// If it fails, it returns a fallback value according to the device type.
-func fetchMemory(hdm *server.HwDevManager, devType string) (int, error) {
+func fetchMemory(hdm *AscendManager) (int, error) {
 	memSize, err := hdm.GetChipMem()
 	if err == nil {
 		return int(memSize), nil
-	}
-	if strings.Contains(devType, "Ascend910") {
-		return 32, err
-	} else if strings.Contains(devType, "Ascend310P") {
-		return 16, err
 	}
 	return 0, err
 }
 
 // getDeviceResources returns the maximum AI Core and memory for a device
 // depending on whether it has been split into vNPUs or not.
-func getDeviceResources(hdm *server.HwDevManager, devType string, vnpuManager *VnpuManager, deviceName string) (int, int) {
+func getDeviceResources(mgr *AscendManager, devType string, vnpuManager *VnpuManager, deviceName string) (int, int) {
 	if vnpuManager == nil {
 		return 0, 0
 	}
@@ -75,11 +56,11 @@ func getDeviceResources(hdm *server.HwDevManager, devType string, vnpuManager *V
 
 	// If the device has not been split yet, return the full card resources
 	if len(physicalNpu.AllocatedSlices) == 0 {
-		aiCores, errCore := fetchAiCore(hdm, devType)
+		aiCores, errCore := fetchAiCore(mgr)
 		if errCore != nil {
 			log.Printf("Failed to fetch AI Core count: %v", errCore)
 		}
-		mem, errMem := fetchMemory(hdm, devType)
+		mem, errMem := fetchMemory(mgr)
 		if errMem != nil {
 			log.Printf("Failed to fetch memory size: %v", errMem)
 		}
@@ -103,13 +84,8 @@ func getDeviceResources(hdm *server.HwDevManager, devType string, vnpuManager *V
 // enumerateAllPossibleDevices initializes the devmanager, creates a vNPU manager if possible,
 // and enumerates all possible devices to produce an AllocatableDevices map.
 func enumerateAllPossibleDevices() (AllocatableDevices, *VnpuManager, error) {
-	devM, err := devmanager.AutoInit("")
-	if err != nil {
-		return nil, nil, err
-	}
-	hdm := server.NewHwDevManager(devM)
-	allInfo := hdm.AllInfo
-
+	mgr, err := NewAscendManager()
+	allInfo, _ := mgr.NewHwDevManager()
 	vnpuManager, err := NewVnpuManager()
 	if err != nil {
 		log.Printf("Failed to initialize vNPU manager: %v. Only full-card allocation is supported.", err)
@@ -129,7 +105,7 @@ func enumerateAllPossibleDevices() (AllocatableDevices, *VnpuManager, error) {
 
 		if vnpuManager != nil {
 			vnpuManager.InitPhysicalNpu(deviceName, dev.LogicID, dev.DevType)
-			maxAicore, maxMemory := getDeviceResources(hdm, dev.DevType, vnpuManager, deviceName)
+			maxAicore, maxMemory := getDeviceResources(mgr, dev.DevType, vnpuManager, deviceName)
 			devAttributes[DriverDomain+"aicore"] = resourceapi.DeviceAttribute{IntValue: ptr.To(int64(maxAicore))}
 			devAttributes[DriverDomain+"memory"] = resourceapi.DeviceAttribute{IntValue: ptr.To(int64(maxMemory))}
 		}
@@ -144,29 +120,6 @@ func enumerateAllPossibleDevices() (AllocatableDevices, *VnpuManager, error) {
 		log.Printf("Discovered NPU device: %s, Type: NPU, Model: %s", deviceName, dev.DevType)
 	}
 	return alldevices, vnpuManager, nil
-}
-
-// contains checks if a string slice contains the target item.
-func contains(slice []string, item string) bool {
-	for _, v := range slice {
-		if v == item {
-			return true
-		}
-	}
-	return false
-}
-
-// generateUUIDs generates a list of UUID strings based on a seed string.
-func generateUUIDs(seed string, count int) []string {
-	rng := rand.New(rand.NewSource(hash(seed)))
-	uuids := make([]string, count)
-	for i := 0; i < count; i++ {
-		charset := make([]byte, 16)
-		rng.Read(charset)
-		u, _ := uuid.FromBytes(charset)
-		uuids[i] = "npu-" + u.String()
-	}
-	return uuids
 }
 
 // hash implements a simple hash function for a string, returning an int64.

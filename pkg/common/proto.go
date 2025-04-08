@@ -16,17 +16,8 @@
 package common
 
 import (
-	"sync"
-
 	"github.com/fsnotify/fsnotify"
 	"k8s.io/apimachinery/pkg/util/sets"
-)
-
-var (
-	// ParamOption for option
-	ParamOption Option
-	// DpStartReset for reset configmap
-	DpStartReset sync.Once
 )
 
 // NodeDeviceInfoCache record node NPU device information. Will be solidified into cm.
@@ -56,14 +47,11 @@ type NpuAllInfo struct {
 
 // NpuDevice npu device description
 type NpuDevice struct {
-	DevType       string
-	DeviceName    string
-	Health        string
-	NetworkHealth string
-	IP            string
-	LogicID       int32
-	PhyID         int32
-	CardID        int32
+	DevType    string
+	DeviceName string
+	LogicID    int32
+	PhyID      int32
+	CardID     int32
 }
 
 // DavinCiDev davinci device
@@ -102,19 +90,6 @@ type Option struct {
 	RealCardType       string   // real card type
 }
 
-// GetAllDeviceInfoTypeList Get All Device Info Type List
-func GetAllDeviceInfoTypeList() map[string]struct{} {
-	return map[string]struct{}{HuaweiUnHealthAscend910: {}, HuaweiNetworkUnHealthAscend910: {},
-		ResourceNamePrefix + Ascend910: {}, ResourceNamePrefix + Ascend910c2: {},
-		ResourceNamePrefix + Ascend910c4: {}, ResourceNamePrefix + Ascend910c8: {},
-		ResourceNamePrefix + Ascend910c16: {}, ResourceNamePrefix + Ascend310: {},
-		ResourceNamePrefix + Ascend310P: {}, ResourceNamePrefix + Ascend310Pc1: {},
-		ResourceNamePrefix + Ascend310Pc2: {}, ResourceNamePrefix + Ascend310Pc4: {},
-		ResourceNamePrefix + Ascend310Pc2Cpu1: {}, ResourceNamePrefix + Ascend310Pc4Cpu3: {},
-		ResourceNamePrefix + Ascend310Pc4Cpu3Ndvpp: {}, ResourceNamePrefix + Ascend310Pc4Cpu4Dvpp: {},
-		HuaweiUnHealthAscend310P: {}, HuaweiUnHealthAscend310: {}, ResourceNamePrefix + AiCoreResourceName: {}}
-}
-
 // FileWatch is used to watch sock file
 type FileWatch struct {
 	FileWatcher *fsnotify.Watcher
@@ -125,13 +100,4 @@ type DevStatusSet struct {
 	UnHealthyDevice    sets.String
 	NetUnHealthyDevice sets.String
 	FreeHealthyDevice  map[string]sets.String
-}
-
-// Get310PProductType get 310P product type
-func Get310PProductType() map[string]string {
-	return map[string]string{
-		"Atlas 300V Pro": Ascend310PVPro,
-		"Atlas 300V":     Ascend310PV,
-		"Atlas 300I Pro": Ascend310PIPro,
-	}
 }
