@@ -81,7 +81,7 @@ func (c *GpuConfig) Validate() error {
 // Validate ensures that VnpuSpec has a valid set of values.
 func (v *VnpuSpec) Validate() error {
 	if v.TemplateName == "" {
-		return fmt.Errorf("vNPU模板名称不能为空")
+		return fmt.Errorf("vNPU template name is required")
 	}
 	return nil
 }

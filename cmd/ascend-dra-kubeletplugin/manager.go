@@ -63,11 +63,9 @@ func (am *AscendManager) getAiCoreCount(cgoVDevInfo npuCommon.VirtualDevInfo) (i
 }
 
 func (am *AscendManager) getMemorySize(cgoVDevInfo npuCommon.VirtualDevInfo) (int32, error) {
-	// 从TotalResource.Computing.MemorySize获取内存大小（单位：MB）
 	memorySize := cgoVDevInfo.TotalResource.Computing.MemorySize
 	memorySize = memorySize / 1024
-	// 验证内存大小是否在合理范围内
-	if memorySize <= 0 || memorySize > 1024 { // 假设最大支持1TB内存
+	if memorySize <= 0 || memorySize > 1024 {
 		return 0, fmt.Errorf("invalid memory size %d", memorySize)
 	}
 	return int32(memorySize), nil
@@ -89,7 +87,7 @@ func (am *AscendManager) GetChipMem() (int32, error) {
 		}
 		if err != nil {
 			// if not support found memory size, setting a default value
-			return 32, nil // 默认32GB内存
+			return 32, nil
 		}
 		return am.getMemorySize(cgoVDevInfo)
 	}
